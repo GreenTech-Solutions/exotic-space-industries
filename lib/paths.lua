@@ -10,7 +10,7 @@ local ei_lib = require("lib/lib")
 modprefix = "ei-"
 ei_graphics_base_path = "__base__/graphics/icons/"
 
-ei_path = "__exotic-space-industries__/"
+ei_path = "__exotic-space-industries-razi__/"
 ei_graphics_path = "__exotic-space-industries-graphics-1__/"
 ei_graphics_2_path = "__exotic-space-industries-graphics-2__/"
 ei_graphics_3_path = "__exotic-space-industries-graphics-3__/"

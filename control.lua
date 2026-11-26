@@ -12,6 +12,7 @@
 
 if script.active_mods["gvv"] then require("__gvv__.gvv")() end
 require("util")
+local migrated_storage = require("migrated_storage")
 
 --====================================================================================================
 --MODULES
@@ -246,6 +247,11 @@ end
 
 
 script.on_init(function()
+    local old = migrated_storage.take({"exotic-space-industries"})
+    if old then
+        migrated_storage.adopt(old)
+    end
+
     if remote.interfaces["freeplay"] then
         remote.call("freeplay", "set_disable_crashsite", true)
     end
@@ -259,13 +265,18 @@ script.on_init(function()
 end)
 
 script.on_configuration_changed(function(event)
+    local old = migrated_storage.take({"exotic-space-industries"})
+    if old then
+        migrated_storage.adopt(old)
+    end
+
     refresh_runtime_data()
     ei_tech_scaling.on_research_finished()
 
     -- stop any Gaia reforge that was running while the game was saved
     storage.ei.gaia_reforged = 1
 
-    local own_changes = event.mod_changes and event.mod_changes["exotic-space-industries"]
+    local own_changes = event.mod_changes and event.mod_changes["exotic-space-industries-razi"]
     if own_changes then
         -- migrations of older saves (all of them are idempotent)
         ei_black_hole.migrate()
