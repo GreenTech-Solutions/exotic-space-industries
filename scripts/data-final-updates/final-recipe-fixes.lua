@@ -149,6 +149,8 @@ for name,recipe in pairs(data.raw.recipe) do
     ei_lib.recipe_swap(name, "steel-beam", "steel-plate")
 end
 
+ei_lib.recipe_swap("fission-reactor-equipment", "uranium-fuel-cell", "ei-uranium-235-fuel")
+
 ei_lib.recipe_swap("concrete", "ei-copper-mechanical-parts", "iron-stick")
 ei_lib.recipe_swap("refined-concrete", "ei-copper-mechanical-parts", "iron-stick")
 
@@ -159,7 +161,7 @@ ei_lib.add_unlock_recipe("ei-morphium-usage","ei-concentrated-morphium-lubricant
 
 ei_lib.enable_from_start("iron-stick")
 ei_lib.enable_from_start("iron-gear-wheel")
-ei_lib.enable_from_start("blank-tech-card")
+ei_lib.enable_from_start("kr-blank-tech-card")
 
 --ei_lib.add_unlock_recipe("inhibitor-lamp","inhibitor-lamp") --?
 ei_lib.add_unlock_recipe("uranium-mining","centrifuge")
@@ -198,6 +200,7 @@ if mods and mods["aai-signal-transmission"] then
     ei_lib.add_unlock_recipe("aai-signal-transmission","aai-signal-sender")
     ei_lib.remove_unlock_recipe("space-platform","aai-signal-sender")
 end
+ei_lib.add_unlock_recipe("electronics","stone-tablet")
 ei_lib.add_unlock_recipe("electronics","stone-tablet")
 ei_lib.add_unlock_recipe("ei-steam-power","boiler")
 ei_lib.add_unlock_recipe("ei-electricity-power","steam-engine")
@@ -687,7 +690,7 @@ data:extend({
     results = {
         {type = "item", name = "copper-plate", amount = 1},
     },
-    enabled = true,
+    enabled = false,
     main_product = "copper-plate",
 },
 {
@@ -701,7 +704,7 @@ data:extend({
     results = {
         {type = "item", name = "ei-copper-mechanical-parts", amount = 1},
     },
-    enabled = true,
+    enabled = false,
     main_product = "ei-copper-mechanical-parts",
 },
 
@@ -724,3 +727,6 @@ data:extend({
 })
 
 ei_lib.add_unlock_recipe("space-science-pack","ei-space-data")
+
+ei_lib.add_unlock_recipe("electronics","ei-cable-to-plates")
+ei_lib.add_unlock_recipe("electronics","ei-cable-to-copper-parts")

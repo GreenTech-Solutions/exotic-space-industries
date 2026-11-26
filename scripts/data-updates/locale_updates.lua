@@ -23,7 +23,7 @@ end
 local icon_table = ""
 -- make list of all fluid icons
 for _, fluid_name in ipairs(fluids) do
-    new_icon_table = icon_table.."[fluid="..fluid_name.."]"
+    local new_icon_table = icon_table.."[fluid="..fluid_name.."]"
     if string.len(new_icon_table) > max_chars then
         break
     end

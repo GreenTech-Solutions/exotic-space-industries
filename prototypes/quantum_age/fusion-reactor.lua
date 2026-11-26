@@ -269,11 +269,11 @@ local base_recipe = {
 
 
 -- get data from ei_data.fusion
-fuel_combinations = ei_data.fusion.fuel_combinations
-temp_modes = ei_data.fusion.temp_modes
-fuel_injection_modes = ei_data.fusion.fuel_injection_modes
+local fuel_combinations = ei_data.fusion.fuel_combinations
+local temp_modes = ei_data.fusion.temp_modes
+local fuel_injection_modes = ei_data.fusion.fuel_injection_modes
 
-coolant_fuel_value = ei_data.fusion.coolant_fuel_value
+local coolant_fuel_value = ei_data.fusion.coolant_fuel_value
 
 -- make recipes for all possible fuel, temp and fuel injection combinations
 for fuel1, fuel2_combinations in pairs(fuel_combinations) do

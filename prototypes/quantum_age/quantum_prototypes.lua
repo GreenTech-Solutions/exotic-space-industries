@@ -1111,28 +1111,28 @@ data:extend({
         enabled = false,
         main_product = "ei-circuit-board",
     },
-    {
-        name = "ei-processing-unit-circuit-board",
-        type = "recipe",
-        category = "crafting",
-        energy_required = 10,
-        ingredients = {
-            {type = "item", name = "ei-advanced-semiconductor", amount = 1},
-            {type = "item", name = "ei-electronic-parts", amount = 1},
-            {type = "item", name = "ei-superior-data", amount = 8},
-            {type = "item", name = "ei-circuit-board", amount = 1},
-        },
-        results = {
-            {type = "item", name = "processing-unit", amount = 2},
-        },
-        always_show_made_in = true,
-        enabled = false,
-        main_product = "processing-unit",
-        subgroup = "intermediate-product",
-        order = "g[processing-unit]-a",
-        icon = ei_graphics_other_path.."processing-unit.png",
-        icon_size = 64,
-    },
+    -- {
+    --     name = "ei-processing-unit-circuit-board",
+    --     type = "recipe",
+    --     category = "crafting",
+    --     energy_required = 10,
+    --     ingredients = {
+    --         {type = "item", name = "ei-advanced-semiconductor", amount = 1},
+    --         {type = "item", name = "ei-electronic-parts", amount = 1},
+    --         {type = "item", name = "ei-superior-data", amount = 8},
+    --         {type = "item", name = "ei-circuit-board", amount = 1},
+    --     },
+    --     results = {
+    --         {type = "item", name = "processing-unit", amount = 2},
+    --     },
+    --     always_show_made_in = true,
+    --     enabled = false,
+    --     main_product = "processing-unit",
+    --     subgroup = "intermediate-product",
+    --     order = "g[processing-unit]-a",
+    --     icon = ei_graphics_other_path.."processing-unit.png",
+    --     icon_size = 64,
+    -- },
     {
         name = "ei-fission-tech-u235",
         type = "recipe",
@@ -2764,10 +2764,10 @@ data:extend({
                 type = "unlock-recipe",
                 recipe = "ei-eu-circuit"
             },
-            {
-                type = "unlock-recipe",
-                recipe = "ei-processing-unit-circuit-board"
-            },
+            -- {
+            --     type = "unlock-recipe",
+            --     recipe = "ei-processing-unit-circuit-board"
+            -- },
         },
         unit = {
             count = 100,

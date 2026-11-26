@@ -1,8 +1,16 @@
-local model = {}
+--====================================================================================================
+-- ORBITAL COMBINATOR
+--====================================================================================================
+-- A constant combinator on a planet surface that mirrors the logistic requests of all space
+-- platforms of its force that are currently orbiting that planet. Every platform gets its own
+-- logistic section, named after the platform (section group).
+-- Updated round-robin, one combinator per call; each call performs at most one structural change
+-- (add/remove a section) so the work is spread over several updates.
+--====================================================================================================
 
-local function sb(data) game.players[1].force.print(serpent.block(data)) end
-local function sl(data) game.players[1].force.print(serpent.line(data)) end
-local function print(line) game.players[1].force.print(line) end
+local util = require("scripts/control/util")
+
+local model = {}
 
 
 function model.entity_check(entity)
@@ -13,12 +21,7 @@ end
 
 
 function model.check_init()
-  if not storage.ei.orbital_combinators then
-    storage.ei.orbital_combinators = {}
-  end
-  if not storage.ei.orbital_combinators_break_point then
-    storage.ei.orbital_combinators_break_point = nil
-  end
+  storage.ei.orbital_combinators = storage.ei.orbital_combinators or {}
 end
 
 
@@ -43,7 +46,7 @@ local function get_logistic_content(entity)
   if not entity then return {} end 
   if not entity.valid then return {} end  
 
-  lst = {}
+  local lst = {}
   for _,logistic_point in pairs(entity.get_logistic_point()) do
     -- sb(logistic_point)
     for _,logistic_section in pairs(logistic_point.sections) do
@@ -84,6 +87,7 @@ local function set_slot(section,index,filter)
         section.clear_slot(i)
         if slot.min ~= nil and filter.min ~= nil then
           filter.min = filter.min + slot.min
+          if filter.min ~= nil and filter.max ~= nil and filter.min > filter.max then filter.min = filter.max end
           section.set_slot(i,filter)     
         end
         return   
@@ -103,7 +107,6 @@ local function set_combinator(entity,requests)
   if not control then return end
   -- sl("set_logistic_sections - 2")
 
-  local removed = true
   for i = 1,control.sections_count do
     local remove = true
     for name,request in pairs(requests) do 
@@ -158,7 +161,7 @@ function model.update_orbital_combinators(entity)
   if not entity then return end
   if not entity.valid then return end
 
-  requests = {}
+  local requests = {}
 
   for index,platform in pairs(entity.force.platforms) do
     if platform and platform.valid then 
@@ -171,47 +174,28 @@ function model.update_orbital_combinators(entity)
   set_combinator(entity,requests)
 end
 
+---Round-robin: updates one orbital combinator per call.
+---@return boolean did_work
 function model.update()
-    if not storage.ei and storage.ei.orbital_combinators then
-        return
+    local combinators = storage.ei and storage.ei.orbital_combinators
+    if not combinators then
+        return false
     end
 
-    -- if no current break point then try to make a new one
-    if not storage.ei.orbital_combinators_break_point and next(storage.ei.orbital_combinators) then
-       storage.ei.orbital_combinators_break_point,_ = next(storage.ei.orbital_combinators)
+    local key = util.next_key(combinators, storage.ei.orbital_combinators_break_point)
+    storage.ei.orbital_combinators_break_point = key
+    if key == nil then
+        return false
     end
 
-    -- if no current break point then return
-    if not storage.ei.orbital_combinators_break_point then
-        return
-    end
-
-    -- get current break point
-    local break_id = storage.ei.orbital_combinators_break_point
-
-    model.update_orbital_combinators(storage.ei.orbital_combinators[break_id])
-
-    -- get next break point
-    if next(storage.ei.orbital_combinators, break_id) then
-        storage.ei.orbital_combinators_break_point,_ = next(storage.ei.orbital_combinators, break_id)
+    local entity = combinators[key]
+    if entity and entity.valid then
+        model.update_orbital_combinators(entity)
     else
-       storage.ei.orbital_combinators_break_point = nil
+        combinators[key] = nil
     end
 
+    return true
 end
 
 return model
---[[
-function model.update()
-  if not storage.ei.orbital_combinators then
-    return
-  end
-
-  for _,entity in pairs(storage.ei.orbital_combinators) do
-    model.update_orbital_combinators(entity)
-  end
-
-end
-
-return model
-]]

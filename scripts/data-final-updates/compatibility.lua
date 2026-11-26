@@ -10,3 +10,4 @@ if mods["aai-industry"] then
 end
 
 require("compatibility_lignumis")
+require("Krastorio2-spaced-out")

@@ -76,7 +76,8 @@ if ei_lib.config("tech-tree-flatten") then
     name = "advanced-"..tech.name
     if data.raw.technology[name] then ei_lib.add_prerequisite(tech.name,name) end
 
-    mod_prefix,name = tech.name:match("^(.+)-(.+)")
+    local mod_prefix
+    mod_prefix, name = tech.name:match("^(.+)-(.+)")
     if name then 
       name = mod_prefix.."-".."advanced".."-"..name
       if data.raw.technology[name] and name ~= tech.name then ei_lib.add_prerequisite(tech.name,name) end
@@ -168,6 +169,7 @@ ei_lib.add_prerequisite("ei-black-hole-exploration","ei-fusion-drive")
 ei_lib.set_prerequisites("burner-mechanics",{"ei-dark-age"})
 ei_lib.set_prerequisites("kr-automation-core",{"ei-dark-age"})
 ei_lib.set_prerequisites("kr-iron-pickaxe",{"ei-dark-age"})
+ei_lib.set_prerequisites("kr-advanced-pickaxe",{"steel-axe"})
 
 ei_lib.set_prerequisites("radar",{"ei-electricity-power"})
 ei_lib.set_prerequisites("electric-energy-accumulators",{"ei-electricity-power"})
@@ -188,6 +190,9 @@ ei_lib.set_prerequisites("nuclear-power",{"uranium-mining"})
 
 ei_lib.set_prerequisites("kr-fusion-energy",{"lithium-processing","nuclear-power"})
 ei_lib.set_prerequisites("captive-biter-spawner",{"cryogenic-science-pack","biter-egg-handling"})
+
+ei_lib.set_prerequisites("kiln-smelting",{"ei-burner-assembler"})
+
 
 -- ======================================================================================
 

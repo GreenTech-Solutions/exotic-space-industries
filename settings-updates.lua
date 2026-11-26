@@ -55,9 +55,10 @@ set_bool("lignumis","lignumis-belt-progression",false)
 set_bool("lignumis","lignumis-inserter-progression",false)
 set_bool("lignumis","lignumis-ammo-progression",false)
 
+-- ==========================================================
 
-
-
+set_bool("Krastorio2-spaced-out","kr-loaders",false)
+set_bool("Krastorio2-spaced-out","kr-containers",false)
 
 
 

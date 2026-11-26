@@ -1,152 +1,87 @@
--- Init storage variables for Exotic Industries
-ei_lib = require("lib/lib")
+--====================================================================================================
+-- STORAGE INITIALISATION
+--====================================================================================================
+-- Creates and repairs the `storage.ei` table used by all runtime modules.
+-- `check_init` is idempotent: it only fills in missing fields, so it is safe to call from
+-- on_init and on_configuration_changed (migration of older saves).
+--====================================================================================================
+
 local ei_global = {}
-  
---====================================================================================================
---GLOBAL VARIABLES
---====================================================================================================
 
-function ei_global.init()
-    storage.ei = {}
+---Mapping of the "EM updater queue" startup setting to the numeric mode stored in storage.
+---0 = off, 1 = beam, 2 = ring (numbers are faster to compare every update).
+local EM_QUEUE_MODES = {
+    ["Off"] = 0,
+    ["Beam"] = 1,
+    ["Ring"] = 2,
+}
 
-    storage.ei["tech_scaling"] = {}
-    storage.ei["tech_scaling"].maxCost = 0
-    storage.ei["tech_scaling"].startPrice = 0
-    storage.ei["tech_scaling"].techCount = 0
-
-    storage.ei["overload_icons"] = {}
-    storage.ei["neutron_collector_animation"] = {}
-    storage.ei["neutron_sources"] = {}
-    storage.ei["spawner_queue"] = {}
-    storage.ei["orbital_combinators"] = {}
-    storage.ei.spaced_updates = 0
-	storage.ei.rng_counter = 0
-    storage.ei.alien = {}
-    local que = ei_lib.config("em_updater_que") or "Beam"
-    if que == "Beam" then
-        storage.ei.em_train_que = 1
-    elseif que == "Ring" then
-        storage.ei.em_train_que = 2 --faster to compare a number
-    else
-        storage.ei.em_train_que = 0
+---Returns the value of a startup setting "ei-<name>" or `default` when it does not exist.
+---@param name string setting name without the "ei-" prefix
+---@param default any
+local function config_or(name, default)
+    local setting = settings.startup["ei-" .. name]
+    if setting == nil then
+        return default
     end
-	local val
-
-	val = ei_lib.config("em_updater_que_width")
-	storage.ei.que_width = (val ~= nil) and val or 6
-
-	val = ei_lib.config("em_updater_que_transparency")
-	storage.ei.que_transparency = ((val ~= nil) and val or 80) / 100
-
-	val = ei_lib.config("em_updater_que_timetolive")
-	storage.ei.que_timetolive = (val ~= nil) and val or 60
-
-	val = ei_lib.config("em_train_glow_toggle")
-	storage.ei.em_train_glow_toggle = (val ~= nil) and val or true
-
-	val = ei_lib.config("em_train_glow_timetolive")
-	storage.ei.em_train_glow_timeToLive = (val ~= nil) and val or 60
-
-	val = ei_lib.config("em_charger_glow_toggle")
-	storage.ei.em_charger_glow = (val ~= nil) and val or true
-
-	val = ei_lib.config("em_charger_glow_timetolive")
-	storage.ei.em_charger_glow_timeToLive = (val ~= nil) and val or 60
-    storage.ei.gaia_reforged = 0    --Leaving room for planetary evolution down the road
-    ei_lib.crystal_echo("»» INITIALIZING SYSTEM CORE: ＥＸＯＴＩＣ ＳＰΛＣΣ ＩＮＤＵＳＴＲＩＥＳ ««","default-bold")
-    ei_lib.crystal_echo(">> Integrating chronometric lattices... Binding entropy to mass... Stand by.","default-semibold")
+    return setting.value
 end
 
+---(Re)reads all startup settings that the runtime scripts cache in storage.
+---Startup settings can only change together with on_configuration_changed, so caching is safe.
+function ei_global.read_settings()
+    local ei = storage.ei
+
+    ei.em_train_que = EM_QUEUE_MODES[config_or("em_updater_que", "Beam")] or 1
+    ei.que_width = config_or("em_updater_que_width", 6)
+    ei.que_transparency = config_or("em_updater_que_transparency", 80) / 100
+    ei.que_timetolive = config_or("em_updater_que_timetolive", 60)
+
+    -- NOTE: previous versions read the non-existing settings "ei-em_train_glow_toggle" and
+    -- "ei-em_charger_glow_toggle", so the glow could never be disabled.
+    ei.em_train_glow_toggle = config_or("em_train_glow", true)
+    ei.em_train_glow_timeToLive = config_or("em_train_glow_timetolive", 60)
+    ei.em_charger_glow = config_or("em_charger_glow", true)
+    ei.em_charger_glow_timeToLive = config_or("em_charger_glow_timetolive", 60)
+end
+
+---Creates a fresh storage table (new game).
+function ei_global.init()
+    storage.ei = {}
+    ei_global.check_init()
+end
+
+---Fills in every missing storage field. Safe to call any number of times.
 function ei_global.check_init()
-    -- TODO: dont hardcode this
-    if not storage.ei then
-	    storage.ei = {}
-    end
-    if not storage.ei.original_gaia_settings then
-        storage.ei.original_gaia_settings = full_gaia_map_gen_settings
-    end
-    if not storage.ei.gaia_reforged_version then
-        storage.ei.gaia_reforged = 0    --Leaving room for planetary evolution down the road
-    end
+    storage.ei = storage.ei or {}
+    local ei = storage.ei
 
-    local val = ei_lib.config("em_updater_que") or "Beam"
-    if val == "Beam" then
-        storage.ei.em_train_que = 1
-    elseif val == "Ring" then
-        storage.ei.em_train_que = 2 --faster to compare a number
-    else
-        storage.ei.em_train_que = 0
-    end
+    ei.tech_scaling = ei.tech_scaling or {}
+    ei.tech_scaling.maxCost = ei.tech_scaling.maxCost or 0
+    ei.tech_scaling.startPrice = ei.tech_scaling.startPrice or 0
+    ei.tech_scaling.techCount = ei.tech_scaling.techCount or 0
 
-    val = ei_lib.config("em_updater_que_width")
-    storage.ei.que_width = (val ~= nil) and val or 6
+    ei.overload_icons = ei.overload_icons or {}
+    ei.neutron_collector_animation = ei.neutron_collector_animation or {}
+    ei.neutron_sources = ei.neutron_sources or {}
+    ei.spawner_queue = ei.spawner_queue or {}
+    ei.orbital_combinators = ei.orbital_combinators or {}
+    ei.spaced_updates = ei.spaced_updates or 0
+    ei.gaia_reforged = ei.gaia_reforged or 1
 
-    val = ei_lib.config("em_updater_que_transparency")
-    storage.ei.que_transparency = ((val ~= nil) and val or 80) / 100
+    ei.alien = ei.alien or {}
 
-    val = ei_lib.config("em_updater_que_timetolive")
-    storage.ei.que_timetolive = (val ~= nil) and val or 60
+    -- master/slave registries (copper/iron beacons) and fluid handling entities
+    ei.copper_beacon = ei.copper_beacon or {}
+    ei.copper_beacon.master = ei.copper_beacon.master or {}
+    ei.copper_beacon.slave = ei.copper_beacon.slave or {}
+    ei.fluid_entity = ei.fluid_entity or {}
 
-    val = ei_lib.config("em_train_glow_toggle")
-    storage.ei.em_train_glow_toggle = (val ~= nil) and val or true
+    -- surfaces that count as "Gaia" for entity swaps; the planet surface is named "Gaia"
+    storage.gaia_surfaces = storage.gaia_surfaces or {}
+    storage.gaia_surfaces["Gaia"] = true
 
-    val = ei_lib.config("em_train_glow_timetolive")
-    storage.ei.em_train_glow_timeToLive = (val ~= nil) and val or 60
-
-    val = ei_lib.config("em_charger_glow_toggle")
-    storage.ei.em_charger_glow = (val ~= nil) and val or true
-
-    val = ei_lib.config("em_charger_glow_timetolive")
-    storage.ei.em_charger_glow_timeToLive = (val ~= nil) and val or 60
-
-    if not storage.ei["tech_scaling"] then
-        storage.ei["tech_scaling"] = {}
-    end
-
-    if not storage.ei["tech_scaling"].maxCost then
-        storage.ei["tech_scaling"].maxCost = 0
-    end
-
-    if not storage.ei["tech_scaling"].startPrice then
-        storage.ei["tech_scaling"].startPrice = 0
-    end
-
-    if not storage.ei["tech_scaling"].techCount then
-        storage.ei["tech_scaling"].techCount = 0
-    end
-
-    if not storage.ei["overload_icons"] then
-        storage.ei["overload_icons"] = {}
-    end
-
-    if not storage.ei["neutron_collector_animation"] then
-        storage.ei["neutron_collector_animation"] = {}
-    end
-
-    if not storage.ei["neutron_sources"] then
-        storage.ei["neutron_sources"] = {}
-    end
-
-    if not storage.ei["spawner_queue"] then
-        storage.ei["spawner_queue"] = {}
-    end
-
-    if not storage.ei["orbital_combinators"] then
-        storage.ei["orbital_combinators"] = {}
-    end
-
-    if not storage.ei.spaced_updates then
-        storage.ei.spaced_updates = 0
-    end
-
-	if not storage.ei.rng_counter then
-		storage.ei.rng_counter = 0
-	end
-
-    if not storage.ei.alien then
-        storage.ei.alien = {}
-        storage.ei.alien.state = {}
-    end
+    ei_global.read_settings()
 end
 
 return ei_global

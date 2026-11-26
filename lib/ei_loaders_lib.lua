@@ -229,6 +229,8 @@ end
 --====================================================================================================
 
 -- building handler
+-- NOTE: control.lua only calls this for entities built by hand (on_built_entity), so loaders
+-- placed from blueprints by robots keep the orientation stored in the blueprint.
 ---------------------------------------------------------
 function ei_loaders_lib.on_built_entity(e)
     if not e then return end
@@ -271,7 +273,11 @@ function ei_loaders_lib.snap_belt(belt)
 
     -- if splitter offset by 0.5 in the direction it is facing
     if belt.type == "splitter" then
+        local input_pos2, output_pos2
         input_pos, output_pos, input_pos2, output_pos2 = ei_loaders_lib.get_splitter_positions(belt, input_pos, output_pos)
+        if not input_pos then
+            return -- non cardinal direction
+        end
 
         ei_loaders_lib.call_snap_input(belt, input_pos2)
         ei_loaders_lib.call_snap_input(belt, output_pos2)

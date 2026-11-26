@@ -1,369 +1,283 @@
+--====================================================================================================
+-- GAIA
+--====================================================================================================
+-- Gaia specific entity behaviour:
+--   * entity swaps: some entities have a stronger "Gaia" variant which is used while they stand
+--     on a Gaia surface and swapped back to the regular variant elsewhere
+--   * build restrictions (entities that can not be built on / outside of Gaia)
+--   * void engine: needs an "out-of-map" void rift in range, draws beams into it
+--
+-- Gaia surfaces are listed in storage.gaia_surfaces (the planet surface "Gaia" is always included;
+-- other mods may add surfaces through the "exotic-industries" remote interface).
+--====================================================================================================
+
+local util = require("scripts/control/util")
+
 local model = {}
 
---====================================================================================================
---GAIA
---====================================================================================================
+-- buildings that will get destroyed (returned as item) when placed on Gaia
+model.destroy_gaia = {}
 
-local tile_settings = {
-}
+-- buildings that will get destroyed (returned as item) when placed outside of Gaia
+model.destroy_non_gaia = {}
 
-local entity_settings = {
-    ["tree-01"] = {frequency = 0, size = 0, richness = 0},
-    ["tree-02"] = {frequency = 0, size = 0, richness = 0},
-    ["tree-05"] = {frequency = 0, size = 0, richness = 0},
-    ["tree-09"] = {frequency = 0, size = 0, richness = 0},
-}
-
-local decorative_settings = {
-    ["green-pita"] = {frequency = 0.1, size = 1, richness = 1},
-}
-
--- buildings that will get destroyed on gaia
-model.destroy_gaia = {
-    -- ["offshore-pump"] = true,
-}
-
--- buildings that will get destroyed on non gaia
-model.destroy_non_gaia = {
-    -- ["ei-gaia-pump"] = true,
-}
-
--- buildings that will get swapped to gaia version
+-- regular entity -> Gaia variant (swapped on Gaia surfaces)
 model.swap_gaia = {
     ["ei-crystal-accumulator"] = "ei-crystal-accumulator-gaia",
-    ["offshore-pump"] = "ei-gaia-pump"
 }
 
-
--- happens 10 times in total before the entity is destroyed
-model.hour = 60 * 60 * 60
-
-model.entity_damage_ticks = {
-  
-}
-
-local presets = require("lib/spawner_presets")
-
---====================================================================================================
---UTIL
---====================================================================================================
-
-function model.entity_check(entity)
-
-    if not storage.gaia_surfaces then 
-      storage.gaia_surfaces = {}
-      storage.gaia_surfaces['gaia'] = true 
-    end
-
-    if entity == nil then
-        return false
-    end
-
-    if not entity.valid then
-        return false
-    end
-
-    return true
+-- Gaia variant -> regular entity (swapped outside of Gaia, prevents moving the boosted variant away)
+model.swap_non_gaia = {}
+for regular, gaia_variant in pairs(model.swap_gaia) do
+    model.swap_non_gaia[gaia_variant] = regular
 end
 
+local VOID_RIFT_TILE = "out-of-map"
+local VOID_RIFT_RADIUS = 30
 
---ENTITY LIFETIMES AND REGISTER
+--UTIL
 ------------------------------------------------------------------------------------------------------
 
-function model.register_entity(entity, overload)
-
-    overload = overload or false
-
-    if not model.entity_check(entity) then
-        return
-    end
-
-    -- this a player built entity?
-    if not entity.last_user then
-        if not overload then
-            return
-        end
-    end
-
-    if not storage.ei.damage_ticks then
-        storage.ei.damage_ticks = {}
-    end
-
-    if not model.entity_damage_ticks[entity.name] then
-        return
-    end
-
-    -- register the entity for lifetime
-    table.insert(storage.ei.damage_ticks, {
-        ["entity"] = entity,
-        ["update_tick"] = game.tick + model.entity_damage_ticks[entity.name],
-        ["damage"] = 90
-    })
-
+---Returns true if the surface counts as Gaia.
+---@param surface LuaSurface
+function model.is_gaia_surface(surface)
+    local gaia_surfaces = storage.gaia_surfaces
+    return gaia_surfaces ~= nil and gaia_surfaces[surface.name] == true
 end
 
-
-function model.update_entity_lifetimes()
-
-    if not storage.ei.damage_ticks then
+---Drops the entity as an item (marked for deconstruction) at its position.
+---Only works for entities whose item has the same name as the entity.
+function model.create_drop(entity)
+    if not util.is_valid(entity) or not prototypes.item[entity.name] then
         return
     end
 
-    local damage_ticks = storage.ei.damage_ticks
-    local new_update = {}
-
-    -- apply damage to entities that are registered
-    for i,v in ipairs(damage_ticks) do
-       local entity = v.entity
-       local update_tick = v.update_tick
-       local damage = v.damage
-        
-        if not model.entity_check(entity) then
-            goto continue
-        end
-
-        if update_tick > game.tick then
-            goto continue
-        end
-
-        -- apply damage
-        if damage > 10 then
-            damage = damage - 10
-            
-            rendering.draw_text{
-                text = tostring(damage).."%",
-                surface = entity.surface,
-                target = entity,
-                color = {r=0, g=0.86, b=0.1},
-                scale = 1.25,
-                target_offset = {0, 0.5},
-                alignment = "center",
-                scale_with_zoom = false,
-                time_to_live = model.entity_damage_ticks[entity.name]+1,
-            }
-        else
-            model.degrade_building(entity)
-            goto continue
-        end
-        
-
-        table.insert(new_update, {
-            ["entity"] = entity,
-            ["update_tick"] = game.tick + model.entity_damage_ticks[entity.name],
-            ["damage"] = damage
-        })
-
-        ::continue::
-
-    end
-
-    -- add new entities to the update list
-    for i,v in ipairs(new_update) do
-        table.insert(damage_ticks, v)
-    end
-    
-    -- remove old entities from the update list
-    while true do
-        if not model.remove_search_tick(storage.ei.damage_ticks, game.tick) then
-            break
-        end
-    end
-
+    entity.surface.spill_item_stack{
+        position = entity.position,
+        stack = {name = entity.name, count = 1},
+        enable_looted = true,
+        force = entity.force,
+        allow_belts = false,
+    }
 end
 
-
-function model.remove_search_tick(foo, tick)
-
-    for i,v in ipairs(foo) do
-        if v.update_tick == tick then
-            table.remove(foo, i)
-            return true
-        end
-    end
-
-    return false
-
-end
-
-
-function model.degrade_building(entity)
-
-    -- if there is an unrepaired version of this building then create it
-    -- destroy original building
-
-    if not model.entity_check(entity) then
-        return
-    end
-
-    -- check if this entity is in ei_data.repair_tools
-    for i,v in pairs(ei_data.repair_tools) do
-        if v.result == entity.name then
-            local new_entity,_ = next(v.targets)
-            entity.surface.create_entity({
-                name = new_entity,
-                position = entity.position,
-                force = entity.force,
-                direction = entity.direction,
-                create_build_effect_smoke = false,
-                raise_built = false,
-            })
-            break
-        end
-    end
-
-    -- also print warning
-    game.print({"exotic-industries.building-degraded", entity.name, entity.position.x, entity.position.y})
-
-    entity.destroy()
-
+local function flying_text(entity, text, color)
+    rendering.draw_text{
+        target = entity.position,
+        text = text,
+        alignment = "center",
+        vertical_alignment = "middle",
+        color = color,
+        surface = entity.surface,
+        scale = 1,
+        time_to_live = 120,
+    }
 end
 
 --GAIA RELATED ENTITY SWAPS
 ------------------------------------------------------------------------------------------------------
 
+---Swaps an entity to its Gaia variant on Gaia, or back to the regular one elsewhere.
+---@param entity LuaEntity
 function model.swap_entity(entity)
-    -- swap an entity to its gaia version if placed on gaia
+    if not util.is_valid(entity) then
+        return
+    end
 
-    if not model.entity_check(entity) then return end
+    local target_name
+    if model.is_gaia_surface(entity.surface) then
+        target_name = model.swap_gaia[entity.name]
+    else
+        target_name = model.swap_non_gaia[entity.name]
+    end
 
-    if not storage.gaia_surfaces[entity.surface.name] then return end
-    if not model.swap_gaia[entity.name] then return end
+    if not target_name then
+        return
+    end
 
-    local swap_entity = entity.surface.create_entity({
-        name = model.swap_gaia[entity.name],
-        position = entity.position,
-        force = entity.force,
-        direction = entity.direction,
+    local surface = entity.surface
+    local position = entity.position
+    local force = entity.force
+    local direction = entity.direction
+    local quality = entity.quality
+    local energy = entity.energy
+
+    entity.destroy()
+
+    local swapped = surface.create_entity({
+        name = target_name,
+        position = position,
+        force = force,
+        direction = direction,
+        quality = quality,
         create_build_effect_smoke = false,
         raise_built = false,
     })
 
-    entity.destroy()
-
+    if swapped and swapped.valid then
+        swapped.energy = energy
+    end
 end
 
---NON GAIA BUILDING DESTRUCTION
+--BUILD RESTRICTIONS
 ------------------------------------------------------------------------------------------------------
 
-function model.create_drop(entity)
+---Destroys entities that are not allowed on this surface and returns them as items.
+---@return boolean destroyed
+function model.destroy_building(entity)
+    local on_gaia = model.is_gaia_surface(entity.surface)
 
-    if not model.entity_check(entity) then return end
+    if model.destroy_gaia[entity.name] and on_gaia then
+        flying_text(entity, "Can't build on Gaia!", {r = 1, g = 0, b = 0})
+    elseif model.destroy_non_gaia[entity.name] and not on_gaia then
+        flying_text(entity, "Can only be built on Gaia!", {r = 1, g = 0, b = 0})
+    else
+        return false
+    end
 
-    -- create an item drop of this entity at its pos
-    -- that is marked for deconstruction
-
-    local surface = entity.surface
-    local pos = entity.position
-    local drop_name = entity.name -- only works if item name is the same as entity name
-
-    -- create the drop
-    local drop = surface.create_entity({
-        name = "item-on-ground",
-        position = pos,
-        stack = {name = drop_name, count = 1}
-    })
-
-    -- mark the drop for deconstruction
-    drop.order_deconstruction(entity.force)
-
+    model.create_drop(entity)
+    entity.destroy()
+    return true
 end
 
+--VOID ENGINE
+------------------------------------------------------------------------------------------------------
 
-function model.destroy_building(entity)
+---Creates the visual beams between a void engine and a rift tile. Returns the created beams.
+local function cast_void_beam(engine, rift_tile)
+    local rift_pos = {rift_tile.position.x + 0.5, rift_tile.position.y + 0.75}
+    local engine_pos = {engine.position.x, engine.position.y - 5}
+    local beams = {own = {}, rift = {}}
 
-    local destroy_gaia = model.destroy_gaia
-    local destroy_non_gaia = model.destroy_non_gaia
-    local surface = entity.surface
-
-    if destroy_gaia[entity.name] then
-
-        if storage.gaia_surfaces[surface.name] then
-
-            -- game.print(serpent.block(storage.gaia_surfaces))
-            -- create flying text
-            rendering.draw_text{
-                target = entity.position,
-                text = "Can't build on Gaia!",
-                color = {r=1, g=0, b=0},
-                surface = entity.surface,
-                scale = 1,
-                time_to_live = 120
-            }
-            model.create_drop(entity)
-
-            entity.destroy()
-            return
-        end
-
+    for _ = 1, 3 do
+        local beam = engine.surface.create_entity({
+            name = "electric-beam",
+            force = engine.force,
+            position = engine_pos,
+            target = engine,
+            source_position = engine_pos,
+            raise_built = false,
+            create_build_effect_smoke = false,
+        })
+        if beam then table.insert(beams.own, beam) end
     end
 
-    if destroy_non_gaia[entity.name] then
-
-        if not storage.gaia_surfaces[surface.name] then
-
-            -- game.print(serpent.block(storage.gaia_surfaces))
-            -- create flying text
-            rendering.draw_text{
-                target = entity.position,
-                text = "Can only be built on Gaia!",
-                color = {r=1, g=0, b=0},
-                surface = entity.surface,
-                scale = 1,
-                time_to_live = 120
-            }
-            model.create_drop(entity)
-
-            entity.destroy()
-            return
-        end
-
+    for _ = 1, 3 do
+        local beam = engine.surface.create_entity({
+            name = "electric-beam",
+            force = engine.force,
+            position = rift_pos,
+            target_position = engine_pos,
+            source_position = rift_pos,
+            raise_built = false,
+            create_build_effect_smoke = false,
+        })
+        if beam then table.insert(beams.rift, beam) end
     end
+
+    engine.surface.create_entity({name = "blood-explosion-huge", position = rift_pos, force = engine.force})
+    engine.surface.create_entity({name = "atomic-fire-smoke", position = rift_pos, force = engine.force})
+
+    return beams
+end
+
+---Registers a freshly built void engine, or returns it as item if no void rift is in range.
+function model.register_void_engine(entity)
+    if entity.name ~= "ei-void-engine" or not entity.unit_number then
+        return
+    end
+
+    local rift_tiles = entity.surface.find_tiles_filtered({
+        position = entity.position,
+        radius = VOID_RIFT_RADIUS,
+        name = VOID_RIFT_TILE,
+    })
+
+    if #rift_tiles == 0 then
+        flying_text(entity, "No Void Rift in Range", {r = 1, g = 0.77, b = 0})
+        model.create_drop(entity)
+        entity.destroy()
+        return
+    end
+
+    flying_text(entity, "Void Engine Active", {r = 0, g = 0.77, b = 1})
+
+    storage.ei.void_engines = storage.ei.void_engines or {}
+    storage.ei.void_engines[entity.unit_number] = {
+        entity = entity,
+        beams = cast_void_beam(entity, rift_tiles[math.random(1, #rift_tiles)]),
+    }
+end
+
+---Removes the beams of a void engine that gets removed.
+function model.remove_void_entity(entity)
+    if entity.name ~= "ei-void-engine" or not entity.unit_number then
+        return
+    end
+
+    local engines = storage.ei.void_engines
+    local data = engines and engines[entity.unit_number]
+    if not data then
+        return
+    end
+
+    if data.beams then
+        for _, group in pairs(data.beams) do
+            for _, beam in pairs(group) do
+                util.destroy_entity(beam)
+            end
+        end
+    end
+
+    engines[entity.unit_number] = nil
 end
 
 --DEV COMMANDS
 ------------------------------------------------------------------------------------------------------
 
--- give the player the spawner tool, when creating a new player
+---/gaia teleports an admin to the Gaia surface (developer helper).
 function model.spawn_command(event)
-
-    if not event.player_index then
+    if event.command ~= "gaia" then
         return
     end
 
-    local player = game.get_player(event.player_index)
-    
-    if event.command == "gaia" then
-        game.print("Spawning Gaia")
-
-        model.create_gaia()
-        player.teleport({0,0}, "gaia")
+    local player = util.event_player(event)
+    if not player or not player.admin then
+        return
     end
-    
-end
 
+    local surface = game.get_surface("Gaia")
+    if not surface then
+        player.print("Gaia surface does not exist yet.")
+        return
+    end
+
+    player.teleport({0, 0}, surface)
+end
 
 --====================================================================================================
 --HANDLERS
 --====================================================================================================
 
 function model.on_built_entity(entity)
-
-    if model.entity_check(entity) == false then
+    if not util.is_valid(entity) then
         return
     end
 
-    model.destroy_building(entity)
-    model.swap_entity(entity)
-    model.register_entity(entity)
+    if model.destroy_building(entity) then
+        return
+    end
 
+    model.register_void_engine(entity)
+    if entity.valid then
+        model.swap_entity(entity)
+    end
 end
 
-
-function model.update()
-
-    model.update_entity_lifetimes()
-
+function model.on_destroyed_entity(entity)
+    if util.is_valid(entity) then
+        model.remove_void_entity(entity)
+    end
 end
-
 
 return model

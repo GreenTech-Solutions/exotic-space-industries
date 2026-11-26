@@ -80,7 +80,7 @@ function model.open_gui(player)
           tooltip = {"exotic-industries.gui-open-informatron"},
           style = "frame_action_button",
           tags = {
-              parent_gui = "ei_rocket-silo-console",
+              parent_gui = "ei-fusion-reactor-console",
               action = "goto-informatron",
               page = "fusion_power"
           }
@@ -212,7 +212,8 @@ function model.open_gui(player)
       style = "ei_relative_gui_slider"
   }
 
-  local recipe = player.opened.get_recipe()
+  local entity = player.opened_gui_type == defines.gui_type.entity and player.opened
+  local recipe = entity and entity.valid and entity.get_recipe()
   if recipe then
       local recipe_name = recipe.name
       model.update_gui(player, {
@@ -290,9 +291,9 @@ end
 ---Updates the open entity's current recipe with information gleaned from the GUI.
 ---@param player LuaPlayer Player
 function model.update_recipe(player)
-  local entity = player.opened
+  local entity = player.opened_gui_type == defines.gui_type.entity and player.opened
   local root = player.gui.relative["ei-fusion-reactor-console"]
-  if not root or not entity then return end
+  if not root or not entity or not entity.valid or entity.name ~= "ei-fusion-reactor" then return end
 
   local control = root["main-container"]["control-flow"] --[[@as LuaGuiElement]]
   local fuel_1_frame = control["fuels-frame-1"] --[[@as LuaGuiElement]]
@@ -304,7 +305,7 @@ function model.update_recipe(player)
   local fuel_2 = fuel_2_frame.tags.selected
 
   if not ei_data.fusion.fuel_combinations[fuel_1][fuel_2] then
-      fuel_2, _ = next(ei_data.fusion.fuel_combinations[fuel_1])
+      fuel_2 = next(ei_data.fusion.fuel_combinations[fuel_1])
   end
 
   local temperature = model.slider_array[temperature_slider.slider_value]
@@ -343,12 +344,6 @@ function model.on_gui_click(event)
   if action == "set-fuel" then
       event.element.parent.tags = {selected = event.element.tags.fuel_name}
       model.update_recipe(game.get_player(event.player_index) --[[@as LuaPlayer]])
-  elseif action == "goto-informatron" then
-      remote.call("informatron", "informatron_open_to_page", {
-          player_index = event.player_index,
-          interface = "exotic-industries-informatron",
-          page_name = event.element.tags.page,
-      })
   end
 end
 

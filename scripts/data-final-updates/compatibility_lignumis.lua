@@ -1,7 +1,4 @@
 if mods["lignumis"] then 
-  -- data.raw.recipe["ei-dark-age-tech"].ingredients = data.raw.recipe["wood-science-pack"].ingredients
-  -- data.raw.recipe["ei-steam-age-tech"].ingredients = data.raw.recipe["steam-science-pack"].ingredients
-
   local lignumis_dark_age = table.deepcopy(data.raw.recipe["ei-dark-age-tech"])
   lignumis_dark_age.ingredients = data.raw.recipe["wood-science-pack"].ingredients
   lignumis_dark_age.name = "lignumis-dark-age"
@@ -23,7 +20,6 @@ if mods["lignumis"] then
   data.raw.recipe['lignumis-dark-age'].enabled = true
   
   data.raw.item.wood.fuel_category = "chemical"
-  data.raw.item.lumber.fuel_category = "chemical"
   
   data.raw.item.lumber.place_as_tile = table.deepcopy(data.raw.item.wood.place_as_tile)
   data.raw.item.wood.place_as_tile = nil
@@ -53,6 +49,12 @@ if mods["lignumis"] then
     data.raw["assembling-machine"]["ei-steam-assembler"].crafting_categories = table.deepcopy(data.raw["assembling-machine"]["steam-assembling-machine"].crafting_categories)
   end
 
-  -- ei_lib.add_unlock_recipe("ei-dark-age","basic-circuit-board")
-  -- ei_lib.remove_unlock_recipe("automation-2","steam-science-pack-steam")
+  ei_lib.add_unlock_recipe("burner-automation","gold-plate")
+  ei_lib.add_unlock_recipe("burner-automation","gold-cable")
+  
+  -- ei_lib.sb(data.raw['rocket-silo-rocket']['rocket-silo-rocket'])
+
+  data.raw['rocket-silo-rocket']['provisional-rocket'].inventory_size = 500
+  data.raw["container"]["provisional-rocket-silo-ready"].inventory_size = 500
+
 end

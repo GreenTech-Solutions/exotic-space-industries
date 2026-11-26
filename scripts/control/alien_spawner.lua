@@ -1,17 +1,24 @@
+--====================================================================================================
+-- ALIEN SPAWNER
+--====================================================================================================
+-- Spawns pre-recorded "artifact" structures (lib/spawner_presets.lua) in freshly generated chunks.
+-- Spawning happens in two queued steps (tiles first, entities on the next tick) so that the
+-- tiles already exist when the entities are placed.
+-- Also contains the developer tools (/etool, /etool2) used to record new presets.
+--====================================================================================================
 
-local model = {}
-ei_rng = require("scripts/control/ei_rng")
+local util = require("scripts/control/util")
 local presets = require("lib/spawner_presets")
 
---====================================================================================================
---ALIEN SPAWNER
---====================================================================================================
+local model = {}
 
+-- surfaces on which artifacts may spawn (keys are surface names)
 model.allowed_surfaces = {
     ["nauvis"] = true,
-    ["gaia"] = true
+    ["Gaia"] = true,
 }
 
+-- entities from recorded presets that must never be spawned
 model.forbidden_entities = {
     ["spidertron-leg-1"] = true,
     ["spidertron-leg-2"] = true,
@@ -24,6 +31,7 @@ model.forbidden_entities = {
     ["teleporter-flying-text"] = true,
 }
 
+-- floating warnings shown when alien flowers get destroyed
 model.flower_counter_warnings = {
     [3] = {"exotic-industries.flower-count-3"},
     [5] = {"exotic-industries.flower-count-5"},
@@ -31,702 +39,351 @@ model.flower_counter_warnings = {
     [10] = {"exotic-industries.flower-count-10"},
 }
 
+-- spawn tuning
+local MIN_SPAWN_DISTANCE = 200       -- no artifacts closer than this to (0, 0)
+local LEGENDARY_SPAWN_DISTANCE = 200 -- same for legendary presets
+local MIN_ARTIFACT_DISTANCE = 200    -- minimal distance between two artifacts
+local SPAWN_CHANCE_THRESHOLD = 90    -- roll 1..100, spawn only if roll >= threshold
+local QUEUE_TIMEOUT = 10             -- ticks after which an unprocessed queue entry is dropped
+
 --FLOWER GUARDIAN
 ------------------------------------------------------------------------------------------------------
 
+---Counts destroyed alien flowers (outside of Gaia) and shows escalating warnings.
 function model.count_flowers(entity)
-    -- if entity name conatains "alien-flower" increase count
-    if not storage.ei.flower_counter then
-        storage.ei.flower_counter = 0
+    if entity.surface.name == "Gaia" then
+        return
     end
-
-    -- dont count on gaia
-    if entity.surface.name == "gaia" then
+    if not (string.find(entity.name, "alien", 1, true) and string.find(entity.name, "flower", 1, true)) then
         return
     end
 
-    if string.find(entity.name, "alien") then
+    storage.ei.flower_counter = (storage.ei.flower_counter or 0) + 1
+    local counter = storage.ei.flower_counter
 
-        if string.find(entity.name, "flower") then
-            storage.ei.flower_counter = storage.ei.flower_counter + 1
-        else
-            return
-        end
-
-    else
-        return
-    end
-
-    if model.flower_counter_warnings[storage.ei.flower_counter] then
-        local rand = ei_rng.int("flower", 1, 10)
-        if rand > 4 then
-            -- spawn floating text
-            rendering.draw_text{
-                target = entity,
-                text = model.flower_counter_warnings[storage.ei.flower_counter],
-                color = {r=1, g=0.5, b=0.5},
-                surface = entity.surface,
-                scale = 1,
-                time_to_live = 120
-            }
-        end
-    end
-
-    if storage.ei.flower_counter == 12 then
-        -- spawn text
+    local warning = model.flower_counter_warnings[counter]
+    if warning and math.random(1, 10) > 4 then
         rendering.draw_text{
-            target = entity,
-            text = {"exotic-industries.flower-count-12"},
-            color = {r=1, g=0.2, b=0.2},
+            target = entity.position,
+            text = warning,
+            color = {r = 1, g = 0.5, b = 0.5},
             surface = entity.surface,
             scale = 1,
-            time_to_live = 120
+            time_to_live = 120,
+        }
+    end
+
+    if counter >= 12 then
+        rendering.draw_text{
+            target = entity.position,
+            text = {"exotic-industries.flower-count-12"},
+            color = {r = 1, g = 0.2, b = 0.2},
+            surface = entity.surface,
+            scale = 1,
+            time_to_live = 120,
         }
         storage.ei.flower_counter = 0
-
-        model.spawn_guardian(entity.surface, entity.position)
     end
-
 end
 
-
-function model.spawn_guardian(surface, pos)
-    -- spawn a worm or group of worms at the given position
-    -- according to the current evolution factor
-
-    -- dont spawn on gaia
-    -- if surface.name == "gaia" then
-    --     return
-    -- end
-
-    -- local evolution_factor = game.forces["enemy"].get_evolution_factor(surface)
-
-    -- local worm_name = "small-worm-turret"
-    -- local biter_name = "small-biter"
-    -- if evolution_factor > 0.5 then
-    --     worm_name = "medium-worm-turret"
-    --     biter_name = "medium-biter"
-    -- elseif evolution_factor > 0.75 then
-    --     worm_name = "big-worm-turret"
-    --     biter_name = "big-biter"
-    -- elseif evolution_factor > 0.9 then
-    --     worm_name = "behemoth-worm-turret"
-    --     biter_name = "behemoth-biter"
-    -- end
-
-    -- local worm_positions = {
-    --     {["x"] = pos.x, ["y"] = pos.y}
-    -- }
-
-    -- local rand = math.random(1, 100)
-    -- if rand > 50 then
-    --     -- spawn a group of 3 worms around the given position
-    --     table.insert(worm_positions, {["x"] = pos.x - 2, ["y"] = pos.y - 2})
-    --     table.insert(worm_positions, {["x"] = pos.x + 3, ["y"] = pos.y + 2})
-    -- end
-
-    -- if rand > 90 then
-    --     -- spawn 2 more worms
-    --     table.insert(worm_positions, {["x"] = pos.x - 4, ["y"] = pos.y + 2})
-    --     table.insert(worm_positions, {["x"] = pos.x + 2, ["y"] = pos.y - 3})
-    -- end
-
-    -- for _, worm_pos in ipairs(worm_positions) do
-    --     -- create huge blood explotions
-    --     surface.create_entity{
-    --         name = "blood-explosion-huge",
-    --         position = worm_pos
-    --     }
-
-    --     -- spawn worm
-    --     surface.create_entity{
-    --         name = worm_name,
-    --         position = worm_pos,
-    --         force = "enemy"
-    --     }
-    -- end
-
-    -- -- also get all huge rocks in the area, and turn them into biters
-
-    -- rocks = surface.find_entities_filtered{
-    --     area = {
-    --         {pos.x - 30, pos.y - 30},
-    --         {pos.x + 30, pos.y + 30}
-    --     },
-    --     name = "huge-rock"
-    -- }
-
-    -- for _, rock in ipairs(rocks) do
-    --     local pos = rock.position
-
-    --     rock.destroy()
-        
-    --     -- create huge blood explotions
-    --     surface.create_entity{
-    --         name = "blood-explosion-huge",
-    --         position = pos
-    --     }
-
-    --     -- spawn biter
-    --     surface.create_entity{
-    --         name = biter_name,
-    --         position = pos,
-    --         force = "enemy"
-    --     }
-
-    -- end
-
-end
-
-
---SPAWNERS
+--SPAWNING
 ------------------------------------------------------------------------------------------------------
 
-function model.entity_check(entity)
-
-    if entity == nil then
-        return false
-    end
-
-    if not entity.valid then
-        return false
-    end
-
-    return true
-
-end
-
-
-function model.spawn_tiles(preset, surface, pos)
-    -- pos is the center of the preset
-
+---Places the preset tiles around `pos` and clears entities standing on them.
+local function spawn_tiles(preset, surface, pos)
     if not preset.tiles then
         return
     end
 
-    local tiles = preset.tiles
     local new_tiles = {}
-    
-    -- correct tile positions by pos
-    for i, tile in ipairs(tiles) do
+    for i, tile in ipairs(preset.tiles) do
+        local x = tile.position.x + pos.x
+        local y = tile.position.y + pos.y
+        new_tiles[i] = {name = tile.name, position = {x = x, y = y}}
 
-        new_tiles[i] = {
-            ["name"] = tile.name,
-            ["position"] = {
-                ["x"] = tile.position["x"] + pos.x,
-                ["y"] = tile.position["y"] + pos.y
-            }
-        }
-
-       -- get area around tile
-        local area = {
-            {new_tiles[i].position["x"] - 1, new_tiles[i].position["y"] - 1},
-            {new_tiles[i].position["x"] + 1, new_tiles[i].position["y"] + 1}
-        }
-
-        -- get entities in area
-        local entities = surface.find_entities(area)
-
-        -- destroy entities
-        for _, entity in ipairs(entities) do
-            entity.destroy()
+        for _, entity in ipairs(surface.find_entities({{x - 1, y - 1}, {x + 1, y + 1}})) do
+            if entity.valid then
+                entity.destroy()
+            end
         end
-
     end
 
-    -- set tiles
     surface.set_tiles(new_tiles)
-
 end
 
-
-function model.prepare_entities(preset, surface, pos)
-    -- remove colliding entities and place tiles underneath each entitypos
-
-    for _, entity in ipairs(preset.structure) do
-        local entity_position = {
-            ["x"] = pos.x + entity.position["x"],
-            ["y"] = pos.y + entity.position["y"]
-        }
-
-        -- are there colliding entities?
-        local entities = surface.find_entities_filtered({
-            position = entity_position,
+---Removes trees/rocks/resources/cliffs standing where preset entities will be placed.
+local function prepare_entities(preset, surface, pos)
+    for _, entity_data in ipairs(preset.structure) do
+        local colliding = surface.find_entities_filtered({
+            position = {pos.x + entity_data.position.x, pos.y + entity_data.position.y},
             radius = 0.5,
             type = {"tree", "cliff", "resource", "simple-entity"},
         })
-        -- destroy them
-        for _, entity in ipairs(entities) do
-            if model.entity_check(entity) then
+        for _, entity in ipairs(colliding) do
+            if entity.valid then
                 entity.destroy()
             end
-        end 
-
+        end
     end
-
 end
 
-
-function model.spawn_entities(preset, surface, pos)
-    -- pos is the center of the preset
-    -- loop over all entities in the preset and spawn them using the given position
-
+---Places the preset entities around `pos` and marks the spot with an artifact flag.
+local function spawn_entities(preset, surface, pos)
     if not preset.structure then
         return
     end
 
-    force = "neutral"
+    local force = preset.force or "neutral"
+    prepare_entities(preset, surface, pos)
 
-    if preset.force then
-        force = preset.force
-    end
+    for _, entity_data in ipairs(preset.structure) do
+        local position = {x = pos.x + entity_data.position.x, y = pos.y + entity_data.position.y}
 
-    model.prepare_entities(preset, surface, pos)
-
-    for _, entity in ipairs(preset.structure) do
-        local entity_position = {
-            ["x"] = pos.x + entity.position["x"],
-            ["y"] = pos.y + entity.position["y"]
-        }
-
-        if model.forbidden_entities[entity.name] then
+        if model.forbidden_entities[entity_data.name] then
+            goto continue
+        end
+        if not prototypes.entity[entity_data.name] then
+            goto continue -- preset references an entity from a mod that is not active
+        end
+        if not surface.can_place_entity({name = entity_data.name, position = position, force = force}) then
             goto continue
         end
 
-        -- check if entity can be spawned
-        if not surface.can_place_entity({
-            name = entity.name,
-            position = entity_position,
-            force = force
-        }) then
-            goto continue
+        do
+            local tile = surface.get_tile(position)
+            if not tile.valid or string.find(tile.name, "water", 1, true) then
+                goto continue
+            end
         end
 
-        -- get tile underneath entity if it includes water continue
-        local tile = surface.get_tile(entity_position)
-
-        -- if tile is invalid continue
-        if not tile.valid then
-            goto continue
+        do
+            local spawned = surface.create_entity({
+                name = entity_data.name,
+                position = position,
+                force = force,
+                raise_built = true,
+            })
+            if spawned and spawned.valid then
+                -- all recorded presets use destructible = true; keep the flag explicit
+                spawned.destructible = entity_data.destructible ~= false
+                spawned.active = true
+            end
         end
-
-        if string.find(tile.name, "water") then
-            goto continue
-        end
-
-        local spawned_entity = surface.create_entity({
-            name = entity.name,
-            position = entity_position,
-            force = force,
-            raise_built = true
-        })
-
-        local destructible = entity.destructible or true
-
-        if spawned_entity == nil then
-            goto continue
-        end
-        
-        spawned_entity.destructible = destructible
-
-        spawned_entity.active = true
 
         ::continue::
     end
-    
-    -- spawn a artifact flag entity to mark the artifact as spawned
-    local flag = surface.create_entity({
-        name = "ei-artifact-flag",
-        position = pos,
-        force = force,
-    })
 
+    surface.create_entity({name = "ei-artifact-flag", position = pos, force = force})
 end
 
+---Picks a random preset name of the given rarity (respecting mod requirements and
+---"only once per game" legendary presets). Returns nil if none is available.
+function model.select_preset(rarity)
+    storage.ei.legendary_spawns = storage.ei.legendary_spawns or {}
 
-function model.get_spawn_position(area)
-
-    local middle_point = {
-        ["x"] = area.left_top.x + (area.right_bottom.x - area.left_top.x) / 2,
-        ["y"] = area.left_top.y + (area.right_bottom.y - area.left_top.y) / 2
-    }
-
-    -- add some randomness to the spawn position
-    local random_point = {
-        ["x"] = middle_point.x + ei_rng.int("alienrandx1", -32, 32),
-        ["y"] = middle_point.y + ei_rng.int("alienrandy1", -32, 32)
-    }
-
-    return random_point
-end
-
-
-function model.spawn_preset(preset, surface, pos, tiles, tick, old_index)
-    
-    if presets.entity_presets[preset] then
-
-        if tiles then
-            model.spawn_tiles(presets.entity_presets[preset], surface, pos)
-
-            -- remove the spawner from the queue
-            table.remove(storage.ei.spawner_queue, old_index)
-
-            -- and que the entity spawn
-            table.insert(storage.ei.spawner_queue, {
-                ["tick"] = tick+1,
-                ["preset"] = preset,
-                ["pos"] = pos,
-                ["surface"] = surface,
-                ["tiles"] = false 
-            })
-        else
-            model.spawn_entities(presets.entity_presets[preset], surface, pos)
-
-            -- remove the spawner from the queue
-            table.remove(storage.ei.spawner_queue, old_index)
+    local candidates = {}
+    for preset_name, preset in pairs(presets.entity_presets) do
+        if preset.rarity == rarity
+            and (not preset.mod or script.active_mods[preset.mod])
+            and not (rarity == "legendary" and storage.ei.legendary_spawns[preset_name]) then
+            table.insert(candidates, preset_name)
         end
     end
 
+    if #candidates == 0 then
+        return nil
+    end
+    return candidates[math.random(1, #candidates)]
 end
 
+---Random point inside the generated chunk area (+-32 tiles around its centre).
+local function get_spawn_position(area)
+    return {
+        x = (area.left_top.x + area.right_bottom.x) / 2 + math.random(-32, 32),
+        y = (area.left_top.y + area.right_bottom.y) / 2 + math.random(-32, 32),
+    }
+end
 
---PRESET SELECTION AND QUEING
-------------------------------------------------------------------------------------------------------
-
+---Rolls whether an artifact spawns at `pos` and queues it (tiles first).
 function model.que_preset(pos, surface, tick)
-
-    local min_range = 200
-    local legendary_range = 200
-    local min_artifact_distance = 200
-    local treshold = 90
-    local rand = ei_rng.int("alienquepreset1", 1, 100)
-
-    if rand < treshold then
+    if math.random(1, 100) < SPAWN_CHANCE_THRESHOLD then
         return
     end
 
-    -- check if the pos is outside the min_range of the spawn
-    -- spawn alwyas in the middle of the map at (0, 0)
-    if math.sqrt(pos.x^2 + pos.y^2) < min_range then
+    local distance = math.sqrt(pos.x ^ 2 + pos.y ^ 2)
+    if distance < MIN_SPAWN_DISTANCE then
         return
     end
 
-    -- select a entity preset to spawn
-    -- rarity:
-    -- 70 = common, 80 = rare, 90 = very rare, 100 = legendary
-    -- create random number between 1 and 100 and
-
-    local rarity = ei_rng.int("alienquepreset2", 1, 100)
-    local preset = nil
-
+    -- rarity roll: <25 common, <50 rare, <75 very rare, else legendary
+    local rarity = math.random(1, 100)
+    local preset
     if rarity < 25 then
-        -- common
         preset = model.select_preset("common")
     elseif rarity < 50 then
-        -- rare
         preset = model.select_preset("rare")
     elseif rarity < 75 then
-        -- very rare
         preset = model.select_preset("very rare")
-    else
-        -- legendary
-
-        -- game.print("legendary spawned")
-
-        -- only spawn each legendary once per game
-        -- and only spawn if range is bigger then legendary range
-
-        if math.sqrt(pos.x^2 + pos.y^2) < legendary_range then
-            return
-        end
-
+    elseif distance >= LEGENDARY_SPAWN_DISTANCE then
         preset = model.select_preset("legendary")
     end
 
-    if not storage.ei.spawner_queue then
-        storage.ei.spawner_queue = {}
-    end
-
-    if preset == nil then
+    if not preset then
         return
     end
 
-    -- check if a artifact is already in the area
-    local flags = surface.find_entities_filtered({
+    -- keep a minimal distance between artifacts
+    local flags = surface.count_entities_filtered({
         position = pos,
-        radius = min_artifact_distance,
-        name = "ei-artifact-flag"
+        radius = MIN_ARTIFACT_DISTANCE,
+        name = "ei-artifact-flag",
+        limit = 1,
     })
-
-    if flags[1] then
+    if flags > 0 then
         return
     end
 
-    -- que the preset to spawn
     table.insert(storage.ei.spawner_queue, {
-        ["tick"] = tick,
-        ["preset"] = preset,
-        ["pos"] = pos,
-        ["surface"] = surface,
-        ["tiles"] = true 
+        tick = tick,
+        preset = preset,
+        pos = pos,
+        surface = surface,
+        tiles = true,
     })
-
 end
 
-
-function model.select_preset(rarity)
-    -- for given rarity make a list of all presets that match the rarity
-    -- select a random preset from the list
-
-    if not storage.ei.legendary_spawns then
-        storage.ei.legendary_spawns = {}
+---Processes queued spawns. Runs every tick; the queue is usually empty.
+function model.update()
+    local queue = storage.ei.spawner_queue
+    if not queue or #queue == 0 then
+        return
     end
 
-    local preset_list = {}
+    local tick = game.tick
+    local follow_ups = {}
 
-    for preset_name, preset in pairs(presets.entity_presets) do
-        if preset.rarity == rarity then
+    -- iterate backwards so that table.remove does not skip entries
+    for i = #queue, 1, -1 do
+        local entry = queue[i]
+        local preset = presets.entity_presets[entry.preset]
 
-            if preset.mod then
-                if not script.active_mods[preset.mod] then
-                    goto continue
+        if not preset or not util.is_valid(entry.surface) or tick - entry.tick > QUEUE_TIMEOUT then
+            table.remove(queue, i)
+        elseif tick >= entry.tick then
+            table.remove(queue, i)
+
+            if entry.tiles then
+                spawn_tiles(preset, entry.surface, entry.pos)
+                -- entities are spawned one tick later, after the tiles exist
+                table.insert(follow_ups, {
+                    tick = tick + 1,
+                    preset = entry.preset,
+                    pos = entry.pos,
+                    surface = entry.surface,
+                    tiles = false,
+                })
+            else
+                spawn_entities(preset, entry.surface, entry.pos)
+                if preset.rarity == "legendary" then
+                    storage.ei.legendary_spawns = storage.ei.legendary_spawns or {}
+                    storage.ei.legendary_spawns[entry.preset] = true
                 end
             end
-
-            if rarity == "legendary" then
-                if storage.ei.legendary_spawns[preset_name] then
-                    goto continue
-                end
-            end
-
-            table.insert(preset_list, preset_name)
         end
-
-        ::continue::
     end
 
-    if #preset_list == 0 then
-        return nil
+    for _, entry in ipairs(follow_ups) do
+        table.insert(queue, entry)
     end
-
-    local rand = ei_rng.int("alienpresetlist", 1, #preset_list)
-
-    return preset_list[rand]
-
 end
 
-
---IMPORT TOOL 
+--DEVELOPER TOOLS (record presets)
 ------------------------------------------------------------------------------------------------------
 
--- give the player the spawner tool, when creating a new player
-function model.give_tool(event)
+---Serialises a table into Lua source (used to write recorded presets to script-output).
+function model.dump(o)
+    if type(o) == "table" then
+        local s = "{ "
+        for k, v in pairs(o) do
+            if type(k) ~= "number" then
+                k = '"' .. k .. '"'
+            end
+            s = s .. "[" .. k .. "] = " .. model.dump(v) .. ","
+        end
+        return s .. "} "
+    elseif type(o) == "string" then
+        return '"' .. o .. '"'
+    end
+    return tostring(o)
+end
 
-    if not event.player_index then
+---/etool and /etool2 give the recording tools. Admin only (they write files on the host).
+function model.give_tool(event)
+    local player = util.event_player(event)
+    if not player or not player.admin then
         return
     end
 
-    local player = game.get_player(event.player_index)
-    
     if event.command == "etool" then
         player.insert({name = "ei-spawner-tool", count = 1})
-    end
-
-    if event.command == "etool2" then
+    elseif event.command == "etool2" then
         player.insert({name = "ei-tile-tool", count = 1})
     end
-    
 end
 
+local function entity_select(event)
+    local preset = {}
+    for _, entity in pairs(event.entities) do
+        table.insert(preset, {
+            name = entity.name,
+            position = {
+                x = entity.position.x - event.area.left_top.x,
+                y = entity.position.y - event.area.left_top.y,
+            },
+            destructible = entity.destructible,
+        })
+    end
+    helpers.write_file("spawner_preset.txt", model.dump(preset), false, event.player_index)
+end
 
-function model.dump(o)
-
-    if type(o) == 'table' then
-       local s = '{ '
-       for k,v in pairs(o) do
-          if type(k) ~= 'number' then k = '"'..k..'"' end
-          s = s .. '['..k..'] = ' .. model.dump(v) .. ','
-       end
-       return s .. '} '
-    else
-        if type(o) == "string" then
-            return '"' .. o .. '"'
-        else
-            return tostring(o)
+local function tile_select(event)
+    local preset = {}
+    for _, tile in ipairs(event.surface.find_tiles_filtered{area = event.area}) do
+        if tile.name ~= "lab-dark-1" and tile.name ~= "lab-dark-2" then
+            table.insert(preset, {
+                name = tile.name,
+                position = {
+                    x = tile.position.x - event.area.left_top.x,
+                    y = tile.position.y - event.area.left_top.y,
+                },
+            })
         end
     end
-
+    helpers.write_file("tile_preset.txt", model.dump(preset), false, event.player_index)
 end
- 
-
-function model.entity_select(event)
-
-    local area = event.area
-    local entities = event.entities
-
-    -- make a spawner preset out of the selected entities
-    local preset = {}
-
-    for _, entity in pairs(entities) do
-        local entity_position = {
-            ["x"] = entity.position.x - area.left_top.x,
-            ["y"] = entity.position.y - area.left_top.y
-        }
-
-        local entity_data = {
-            ["name"] = entity.name,
-            ["position"] = entity_position,
-            ["destructible"] = entity.destructible
-        }
-
-        table.insert(preset, entity_data)
-    end
-
-    -- make a txt file with the preset data in lua format
-    game.write_file("spawner_preset.txt", model.dump(preset))
-
-end
-
-
-function model.tile_select(event)
-
-    local area = event.area
-    
-    -- get all tiles in the area
-    local tiles = event.surface.find_tiles_filtered{area = area}
-
-    -- tiles is array of selected tiles -> make a preset out of it
-    -- prest: { {"position" = pos, "name" = tile_name} }
-
-    local preset = {}
-
-    for i,tile in ipairs(tiles) do
-
-        game.print(tile.name)
-
-        -- exclude lab tiles
-        if tile.name == "lab-dark-1" or tile.name == "lab-dark-2" then
-            goto continue
-        end
-
-        local tile_position = {
-            ["x"] = tile.position.x - area.left_top.x,
-            ["y"] = tile.position.y - area.left_top.y
-        }
-
-        local tile_data = {
-            ["name"] = tile.name,
-            ["position"] = tile_position
-        }
-
-        table.insert(preset, tile_data)
-
-        ::continue::
-
-    end
-
-    -- make a txt file with the preset data in lua format
-    game.write_file("tile_preset.txt", model.dump(preset))
-
-end
-
 
 function model.on_player_selected_area(event)
     if event.item == "ei-spawner-tool" then
-        model.entity_select(event)
+        entity_select(event)
+    elseif event.item == "ei-tile-tool" then
+        tile_select(event)
+        entity_select(event)
     end
-
-    if event.item == "ei-tile-tool" then
-        model.tile_select(event)
-
-        model.entity_select(event)
-    end
-
 end
 
-
---HANDLERS 
+--HANDLERS
 ------------------------------------------------------------------------------------------------------
 
 function model.on_chunk_generated(event)
-    
     if not model.allowed_surfaces[event.surface.name] then
         return
     end
-
-    local pos = model.get_spawn_position(event.area)
-    local surface = event.surface
-
-    -- select a preset and que it for spawning in the next tick
-    local tick = event.tick + 1
-
-    model.que_preset(pos, surface, tick)
-
+    -- queue for the next tick, the chunk has to be fully generated first
+    model.que_preset(get_spawn_position(event.area), event.surface, event.tick + 1)
 end
-
-
-function model.update()
-
-    local tick = game.tick
-
-    if not storage.ei.spawner_queue then
-        return
-    end
-
-    for i, spawner in ipairs(storage.ei.spawner_queue) do
-        if tick >= spawner.tick then
-            -- spawn the preset
-            model.spawn_preset(spawner.preset, spawner.surface, spawner.pos, spawner.tiles, tick, i)
-
-            -- if the preset is legendary, mark it as spawned
-            if presets.entity_presets[spawner.preset].rarity == "legendary" then
-                if spawner.tiles == false then
-                    storage.ei.legendary_spawns[spawner.preset] = true
-                end
-            end
-        end
-
-        -- remove all spawners that are older than 10 ticks
-        if tick - spawner.tick > 10 then
-            table.remove(storage.ei.spawner_queue, i)
-        end
-    end
-
-end
-
 
 function model.on_destroyed_entity(entity)
-
     model.count_flowers(entity)
-
-    if entity.name == "ei-alien-stabilizer" then
-        -- only spawn guardian if the beacons was not placed by the player
-        if entity.last_user == nil then
-            model.spawn_guardian(entity.surface, entity.position)
-        end
-    end
-
-    if entity.name == "ei-alien-beacon" then
-        -- only spawn guardian if the beacons was not placed by the player
-        if entity.last_user == nil then
-            model.spawn_guardian(entity.surface, entity.position)
-        end
-    end
-
-    if entity.name == "ei-crystal-accumulator" then
-        -- only spawn guardian if the beacons was not placed by the player
-        if entity.last_user == nil then
-            model.spawn_guardian(entity.surface, entity.position)
-        end
-    end
-
-    if entity.name == "ei-farstation" then
-        -- only spawn guardian if the beacons was not placed by the player
-        if entity.last_user == nil then
-            model.spawn_guardian(entity.surface, entity.position)
-        end
-    end
-
 end
 
 return model

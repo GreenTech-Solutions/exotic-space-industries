@@ -23,8 +23,6 @@ ei_data = require("lib/data")
 --MAIN CONTENT CODE
 --====================================================================================================
 
-require("prototypes/_K2_/data")
-
 -- add new categories, entities, items, techs, recipes fluids, resources
 
 require("prototypes/pipe-covers")
@@ -42,33 +40,12 @@ require("prototypes/alien_structures/alien_structures")
 require("prototypes/exotic_age/exotic_age")
 require("prototypes/dark_age/loaders")
 require("prototypes/electricity_age/robots")
---These use overrides, keep them after
---[[
-if ei_lib.config("slag") then
-    require("prototypes/slag")
-end
-if ei_lib.config("ei-ash") then
-    require("prototypes/ash")
-end
-]]
+
 --====================================================================================================
 --COMPATIBILITY CODE
 --====================================================================================================
 
-alien_biomes_priority_tiles = alien_biomes_priority_tiles or {}
-table.insert(alien_biomes_priority_tiles, "ei-induction-matrix-tile")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-rock-3")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-rock-2")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-rock-1")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-grass-2_var")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-grass-2")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-grass-1_var")
-table.insert(alien_biomes_priority_tiles, "ei-gaia-grass-1")
-
---====================================================================================================
-
 -- dummy lab so that Factorio doesn't complain about there being no lab that can handle techs
-
 data:extend({
   {
     name = "ei-dummy-lab",
@@ -79,19 +56,10 @@ data:extend({
   }
 })
 
---====================================================================================================
-
+-- Alien Biomes: keep the Gaia and induction matrix tiles on top of its tile layers
 alien_biomes_priority_tiles = alien_biomes_priority_tiles or {}
-
--- error(data.raw.tile)
-
-for _,tile in pairs(data.raw.tile) do 
-  if ei_lib.contains(tile.name,"gaia") then 
+for _, tile in pairs(data.raw.tile) do
+  if ei_lib.contains(tile.name, "gaia") or ei_lib.contains(tile.name, "induction-matrix") then
     table.insert(alien_biomes_priority_tiles, tile.name)
-  end 
-  if ei_lib.contains(tile.name,"induction-matrix") then 
-    table.insert(alien_biomes_priority_tiles, tile.name)
-  end 
+  end
 end
-
--- ei_lib.sb(alien_biomes_priority_tiles)

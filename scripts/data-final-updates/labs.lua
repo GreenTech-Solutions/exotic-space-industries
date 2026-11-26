@@ -15,6 +15,14 @@ end
 data.raw.lab["ei-dark-age-lab"]['inputs'] = table.deepcopy(ei_data.lab_inputs["dark-age-lab"])
 data.raw.lab.lab['inputs'] = table.deepcopy(ei_data.lab_inputs["lab"])
 
+if data.raw.lab["kr-spaceship-research-computer"] then 
+  data.raw.lab["kr-spaceship-research-computer"]['inputs'] = table.deepcopy(ei_data.lab_inputs["dark-age-lab"])
+end
+
+if data.raw.lab["wood-lab"] then 
+  data.raw.lab["wood-lab"]['inputs'] = table.deepcopy(ei_data.lab_inputs["dark-age-lab"])
+end
+
 -- error(serpent.block(data.raw.lab["ei-dark-age-lab"]['inputs']))
 -- error(serpent.block(util.by_pixel))
 

@@ -128,7 +128,7 @@ new_prerequisites_table["quantum-age"] = {
 
 }
 
-numbered_buffs = {
+local numbered_buffs = {
     "stronger-explosives-7",
     "research-speed-6",
     "worker-robots-speed-6",
@@ -145,7 +145,7 @@ numbered_buffs = {
 
 local prereqs_to_remove = {}
 
-function make_numbered_buff_prerequisite(tech)
+local function make_numbered_buff_prerequisite(tech)
 
     -- get last char of tech name as number
     local tech_number = tonumber(string.sub(tech, -1))

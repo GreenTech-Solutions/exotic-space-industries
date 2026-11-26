@@ -42,6 +42,9 @@ ei_graphics_icon_2_path = ei_graphics_2_path.."graphics/icons/"
 ei_graphics_tech_2_path = ei_graphics_2_path.."graphics/techs/"
 
 ei_graphics_glow_path = ei_path.."graphics/glow/"
+ei_void_engine_path = ei_path.."graphics/void_engine/"
+ei_void_engine_items = ei_void_engine_path .. "items/"
+ei_void_engine_entity = ei_void_engine_path .. "entity/"
 
 ei_loaders_item_path = ei_graphics_item_2_path
 ei_loaders_entity_path = ei_graphics_entity_2_path
@@ -65,12 +68,4 @@ ei_trains_sounds_path = ei_path.."sounds/em_trains/"
 ei_trains_entity_path = ei_trains_path.."graphics/em-trains/entities/"
 ei_trains_item_path = ei_trains_path.."graphics/em-trains/items/"
 ei_trains_tech_path = ei_trains_path.."graphics/em-trains/techs/"
---[[
-if ei_lib.config("slag") then
-    ei_slag_path = ei_path.."graphics/slag/"
-end
 
-if ei_lib.config("ash") then
-    ei_ash_path = ei_path.."graphics/ash/"
-end
-]]

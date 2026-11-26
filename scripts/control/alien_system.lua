@@ -235,7 +235,7 @@ end
 function model.set_unlocked(name, force, state)
 
     if not force then force = game.forces["player"] end
-    if not state then state = true end
+    if state == nil then state = true end
     if not storage.ei.alien then return false end
     if not storage.ei.alien[force.name] then return false end
 
@@ -322,10 +322,14 @@ end
 
 function model.update_tier_status(player_index)
 
+    local force_name = game.get_player(player_index).force.name
+    local data = storage.ei.alien[force_name]
+    if not data then return end
+
     -- go through all unlocks and check if all of tier 1 and 2 are unlocked
     -- TIER 1
     local tier_1 = true
-    for i,v in ipairs(storage.ei.alien[game.players[player_index].force.name].unlocks) do
+    for i,v in ipairs(data.unlocks) do
         if v.tier == 1 and v.unlocked == false then
             tier_1 = false
             break
@@ -334,7 +338,7 @@ function model.update_tier_status(player_index)
 
     -- TIER 2
     local tier_2 = true
-    for i,v in ipairs(storage.ei.alien[game.players[player_index].force.name].unlocks) do
+    for i,v in ipairs(data.unlocks) do
         if v.tier == 2 and v.unlocked == false then
             tier_2 = false
             break
@@ -343,11 +347,11 @@ function model.update_tier_status(player_index)
 
     -- apply
     if tier_1 == true then
-        storage.ei.alien[game.players[player_index].force.name].tier_2 = true
+        data.tier_2 = true
     end
 
     if tier_2 == true then
-        storage.ei.alien[game.players[player_index].force.name].tier_3 = true
+        data.tier_3 = true
     end
 
 end
@@ -365,7 +369,8 @@ function model.try_select_alien(player, tags)
     if state == "green" then return end
     if state == "red" then return end
 
-    local key = player.force.name or "player"
+    local key = player.force.name
+    if not storage.ei.alien[key] then return end
 
     -- state is grey, check if player has enough alien and open confirm dialog
     if storage.ei.alien[key].alien < tags.cost then
@@ -473,7 +478,8 @@ function model.select_alien(player, tags)
         screen_gui["ei-alien-confirm-console"].destroy()
     end
 
-    local key = player.force.name or "player"
+    local key = player.force.name
+    if not storage.ei.alien[key] then return end
 
     -- substract the alien, change state and apply effects
     storage.ei.alien[key].alien = storage.ei.alien[key].alien - tags.tags.cost
@@ -621,33 +627,28 @@ function model.repair_artifact(event)
         if model.repair_tools[item].targets[entity.name] then
             
             -- spawn repaired entity and destroy old one
-            local new_entity = entity.surface.create_entity{
+            local surface = entity.surface
+            local position = entity.position
+            local force = entity.force
+            entity.destroy()
+
+            local new_entity = surface.create_entity{
                 name = model.repair_tools[item].result,
-                position = entity.position,
-                force = entity.force,
+                position = position,
+                force = force,
                 raise_built = false,
             }
 
-            entity.destroy()
-
-            -- remove item from inventory
-            if not player then
-                return
-            end
-
-            -- the tool should be in the cursor stack
-            local cursor_stack = player.cursor_stack
-            if not cursor_stack then
-                return
-            end
-
-            if cursor_stack.valid_for_read and cursor_stack.name == item then
+            -- consume the repair tool (it should be in the cursor stack)
+            local cursor_stack = player and player.cursor_stack
+            if cursor_stack and cursor_stack.valid_for_read and cursor_stack.name == item then
                 cursor_stack.clear()
             end
 
-            -- que new entity for damage ticks
-            ei_gaia.register_entity(new_entity, true)
-            ei_gaia.swap_entity(new_entity)
+            -- repaired structures on Gaia turn into their Gaia variant
+            if new_entity and new_entity.valid then
+                ei_gaia.swap_entity(new_entity)
+            end
 
             ei_victory.count_value("artifacts_repaired", 1)
 
@@ -661,15 +662,6 @@ end
 
 --HANDLERS
 ------------------------------------------------------------------------------------------------------
-
-function model.on_built_entity(entity)
-
-    if model.entity_check(entity) == false then
-        return
-    end
-
-end
-
 
 function model.swap_gui(player)
 

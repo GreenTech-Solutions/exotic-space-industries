@@ -225,8 +225,9 @@ function model.repair(player_index, element)
     element.add{type = "label", caption = {"exotic-industries-informatron.repair-text"}}
 end
 
+-- the old knowledge system was removed, its page now shows the artifact information
 function model.knowledge(player_index, element)
-    ei_knowledge_system.knowledge_page(player_index, element)
+    model.artifacts(player_index, element)
 end
 
 

@@ -108,5 +108,8 @@ data:extend({
 local fuel_beam = table.deepcopy(data.raw["beam"]["electric-beam"])
 fuel_beam.name = "ei_fuel-beam"
 fuel_beam.action = nil
+fuel_beam.working_sound.sound.volume = 0.0
+
+-- ei_lib.sb(fuel_beam)
 
 data:extend({fuel_beam})

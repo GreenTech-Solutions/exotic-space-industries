@@ -98,7 +98,7 @@ local function make_dummy_techs(ages_dummy_dict)
     for i,v in pairs(data.raw["technology"]) do
         if data.raw["technology"][i].age then
 
-            age = data.raw["technology"][i].age
+            local age = data.raw["technology"][i].age
 
             if i == "ei-quantum-age" then
                 goto continue

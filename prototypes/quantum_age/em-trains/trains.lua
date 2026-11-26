@@ -15,7 +15,7 @@ local drive_over_tie = function()
 	  sound = sound_variations(ei_path.."sounds/em_trains/em_train_tie", 6, 0.3, { volume_multiplier("main-menu", 3.25), volume_multiplier("driving", 1.9) } )
 	}
   end
-function train_front_light()
+local function train_front_light()
     local train_front_light =
     {
         {
@@ -55,7 +55,7 @@ function train_front_light()
     }
 return train_front_light
 end
-function rolling_stock_standby_light()
+local function rolling_stock_standby_light()
     local standby_light =
     {
         {
@@ -80,7 +80,7 @@ function rolling_stock_standby_light()
     return standby_light
 end
 
-function rolling_stock_back_light()
+local function rolling_stock_back_light()
 --[[
     local back_light =
     {
@@ -301,7 +301,7 @@ data:extend({
 })
 
 
-unit = {
+local unit = {
   count = 100,
   ingredients = ei_data.science["quantum-age"],
   time = 20

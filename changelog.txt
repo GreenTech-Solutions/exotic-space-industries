@@ -1,4 +1,158 @@
 ---------------------------------------------------------------------------------------------------
+Version: 3.0.0
+Date: 25-09-26
+  Major Features:
+    - Multiplayer desync fixes. All runtime state now lives in the synchronised storage table:
+      the entity update scheduler used a plain Lua variable (not saved) to pick the updater of the
+      current tick, so a client that joined a game ran different updates than the server.
+      Verified with Factorio heavy mode (original: mismatch every 10 ticks, now: none).
+    - Round-robin updaters (beacons, pipes, neutron collectors, matter stabilizers, orbital
+      combinators, fuelers, gates, EM trains/chargers) no longer call next() with removed keys,
+      which crashed or desynced freshly loaded clients ("invalid key to 'next'").
+  Bugfixes:
+    - Black hole generator: the GUI stopped updating after save/load and the startup state was lost
+      as soon as the mass reached zero. The "startup" state is now stored explicitly, the generator
+      is updated every tick (stage 1 takes the documented 60 seconds, extractors deliver up to
+      100 GW each) and the GUI refreshes reliably. Existing generators are migrated.
+    - Black hole generator: mining a generator that still contained items crashed the game.
+    - Black hole generator: opening an unregistered generator crashed the GUI.
+    - Dedicated servers crashed when no player had joined yet (EM train buffs read game.players[1]).
+    - Typing "/gaia" in chat crashed the game for everyone. It is now an admin-only teleport.
+    - Opening the induction matrix console could crash the game on the periodic GUI update.
+    - Induction matrix: several crashes when cores/tiles were removed or a matrix had no stats yet.
+    - Neutron collectors next to fusion reactors always had 0 % efficiency (wrong recipe name
+      format when reading the reactor fuel mode).
+    - EM chargers: researched efficiency levels made the energy consumption negative (chargers
+      produced energy). Efficiency now follows the research levels 10 % .. 90 %.
+    - EM chargers: partial charges drained the charger completely, the range toggle button of the
+      EM train window did nothing, charger/train queues collected duplicates after every update.
+    - EM train and charger glow settings could not be disabled (wrong setting names).
+    - Gate: remote exit selection is now per player (two players could overwrite each other,
+      using a leftover remote crashed the game), a player leaving during the selection gets his
+      character back on rejoin, items waiting in a removed gate are dropped instead of deleted,
+      messages go to the gate owner's force instead of spamming everyone.
+    - Fueler: settings are stored per entity (unit number) instead of by position, quality and
+      spoilage of fuel/ammo are preserved, turrets are always resupplied, removed fuelers no longer
+      break the update queue. The Warp Drive Machine surface-change workaround was replaced by
+      proper handling of cloned entities.
+    - Matter stabilizer range/connection previews are drawn per player (selecting a stabilizer
+      cleared the previews of all other players).
+    - Beacon overload: vanilla beacons and newly built machines are now checked as well, a beacon
+      that is being removed is not counted anymore, and only machines disabled by the overload are
+      re-enabled.
+    - Crystal accumulator: the Gaia variant (double output) is used on Gaia again (surface name
+      mismatch), and it is swapped back / mined as the regular accumulator outside of Gaia.
+    - Artifact spawner: stale queue entries on deleted surfaces crashed the game, the recording
+      tools used the removed game.write_file API.
+    - Chat messages with emoji were garbled by the colour gradient (UTF-8 aware now).
+    - Several helper functions (recipe_add, recipe_remove, remove_prerequisite, tech ingredient
+      de-duplication) skipped entries or never matched the Factorio 2.0 ingredient format.
+    - Level overlays for vanilla machine icons are shown (they silently failed for icons without
+      an explicit icon_size).
+  Changes:
+    - Data cables use their own pipe connection category: they only connect to data cables and to
+      the data connections of computers, never to regular pipes. Computing power connections of the
+      computer core, small simulator and quantum computer can not be connected to regular pipes, so
+      regular pipes can no longer carry computing power. Regular pipes that still contain computing
+      power explode (this check did not run at all without copper beacons before).
+    - Batteries from scrap recycling stay at the vanilla 4 % (scrap results are also filtered for
+      items removed by other mods).
+    - Removed the duplicate steam crusher recipe for crushed iron ("ei-crushed-iron-plate"), machines
+      using it are migrated to "ei-crushed-iron".
+    - Krastorio 2 Spaced Out: K2 sand is merged into EI sand, every crusher (steam, EI, K2) can use
+      both crushing recipe categories. Leftover K2 sand can be converted by hand.
+    - Krastorio 2 Spaced Out: "Imersium processing" no longer requires the imersite tech pack it
+      unlocks. A general guard removes science packs from technologies that unlock them.
+    - Gaia map generation is built from a fresh copy of the vanilla Fulgora settings and enforced in
+      data-final-fixes, so mods changing Fulgora or injecting tiles into every planet can no longer
+      turn Gaia into an endless grass field.
+    - "/esi-gaia-reborn" is admin only, runs as a state machine (surface deletion is deferred by
+      the engine) and gives up after 5 failed regenerations instead of looping forever.
+    - Remelting loops (plate -> molten metal -> plate, also via mechanical parts) never receive
+      productivity, including productivity research, so foundry/module productivity can no longer
+      create infinite copper, iron, steel, gold or lead.
+    - Removed the rocket silo "cheat mode" hack: opening a rocket silo gave the player cheat mode
+      (free instant crafting) and removed cheat mode from admins that had it enabled.
+    - Loaders only snap to belts/containers when built by hand; loaders from blueprints keep their
+      blueprint orientation.
+    - Debloat setting is applied once more at the very end (age packs assigned late were missed).
+    - Removed the unused "esi-gaia-reborn" custom input and empty script files.
+  Scripting:
+    - Control stage reorganised: one scheduler (tick based), central GUI click dispatch (including
+      all "open Informatron" buttons), shared helpers in scripts/control/util.lua, storage
+      initialisation and migrations in one place, detailed documentation in every module.
+    - Removed accidental global variables in control and data stage scripts.
+---------------------------------------------------------------------------------------------------
+Version: 2.2.0
+Date: 08-01-26
+  Changes:
+    - Scrap-recycling: battery drop rate 2% => 4%
+    - Scrap-recycling: added alien seed drop with 2% chance
+    - Scrap-recycling: recycler result_inventory_size => 20
+    - Removed blue circuit EI recipe, because of SA recycle system recycling them outputs lategame components, while blue circuits still need to build rocketry things on Nauvis.
+    - You can now dump items to Gaia waters.
+    - And it maybe will work with modded water tiles too (any tile that can provide liquid using pump).
+    - Alien Seeds now stackable.
+    - Due to the light refraction of atmospheric crystals, solar panels do not work on the surface of Gaia.
+---------------------------------------------------------------------------------------------------
+Version: 2.1.1
+Date: 03-01-26
+  Changes:
+    - Changed scrap-recycling recipe results (removed iron gears, overall buffed)
+    - Changed fission-reactor-equipment recipe - now require same EI power cell for craft, same what it can consume for fuel ("uranium-fuel-cell" => "ei-uranium-235-fuel")
+---------------------------------------------------------------------------------------------------
+Version: 2.1.0
+Date: 24-12-25
+  Changes:
+    - Steel heat furnace connection fix
+    - Fluorite again can be filtered from "dirty water" what Excavator outputs. Excavator become avaiable very much earlier - in electricity age, so you can start to craft first Fluorite-dependent things on Nauvis.
+  Notes:
+    - Happy Christmas and New Year Eve!
+---------------------------------------------------------------------------------------------------
+Version: 2.0.7
+Date: 30-09-25
+  Changes:
+    - Small fixes in various places.
+    - Fueler made compatible with Warp Drive Machine. Fuelers not working on "planet orbit" surface aka pseudo-spaceflight, if this option enabled in WDM, but start to work again once landed. Vehicle fueling setting will reset, but ammo-turret / artillery-turret refueling works always, so it continue to restock turrets.
+---------------------------------------------------------------------------------------------------
+Version: 2.0.2
+Date: 20-09-25
+  Changes:
+    - Basic compatibility with 'Krastorio 2: Spaced Out' and planets/packs like 'Stellar Horizons'. 
+    - Bug fixes
+    - Compatibility fixes
+---------------------------------------------------------------------------------------------------
+Version: 1.9.0
+Date: 16-08-25
+  Changes:
+    - Removed integrated K2 entities, as there are standalone K2 for SA now. Not recomended to update on existing save.
+    - EI tech scaling, when enabled, now rise tech multiplier only when important (leading to vanilla/EI endgame, science-pack, or discovery one) tech researched, side ones (like steel pickaxe, for example) will not trigger cost increase. Work also with number of mods.
+---------------------------------------------------------------------------------------------------
+Version: 1.8.0
+Date: 25-07-25
+  Changes:
+    - New Gaia prototype definition, probably should not krangle anymore.
+    - Console command /esi-gaia-reborn to force destroy and recreate surface to fix old saves or if this happens again, will take some time.
+    - Gaia has perpetual lightning storms - now her morphium comes not so free.
+    - Fixed crash related to gate gui.
+    - Removed fulgorian ruins from Gaia generation. Only scrap and lightning attractors remain. 
+    - Ruin lightning attractor coverage sligthly larger.
+    - Lightning damage increased.
+    - Option to make Gaia entities requiring heating, default on, but needs to be off for "/esi-gaia-reborn" to work.
+---------------------------------------------------------------------------------------------------
+Version: 1.7.2
+Date: 13-07-25
+  Changes:
+    - Lignumis: lumber fuel_category no longer overridden to "chemical" and can not be burned as chemical fuel
+---------------------------------------------------------------------------------------------------
+Version: 1.7.0
+Date: 05-07-25
+  Changes:
+    - Removed Gaia reforge
+    - Removed VFX on player spawn
+    - Removed morphium-patch as redundant
+    - Partially implemented Void Engine, unpublished bit of original EI content, though you need out-of-map tile in range for it to work. You can use other mods like Voidfill to provide it. It's original mechanic and limitations does not suits Space Age, but at this moment i can not re-implement it suitable and properly. 
+---------------------------------------------------------------------------------------------------
 Version: 1.6.0
 Date: 25-05-25
   Changes:
@@ -12,10 +166,8 @@ Date: 4-30-25
     - EM Train Carriages now glow alongside EM Locomotives
   Changes:
     - lang_ru updated by ashot15
-    - ei_rng switched from UPS expensive factorio rng to deterministic linear congruential generator
   Fixes:
     - reforge_gaia behavior corrected, recursion stabilized. You will need to correct your ship schedule.
-    - alien_spawner.lua transitioned from math.rand to ei_rng
 ---------------------------------------------------------------------------------------------------
 Version: 1.5.6
 Date: 4-19-25

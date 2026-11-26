@@ -309,22 +309,6 @@ data:extend({
         main_product = "ei-crushed-iron",
     },
     {
-        name = "ei-crushed-iron-plate",
-        type = "recipe",
-        category = "ei-crushing",
-        energy_required = 1,
-        ingredients = {
-            {type="item", name="iron-plate", amount=1}
-        },
-        results = {
-            {type = "item", name = "ei-crushed-iron", amount = 2},
-        },
-        always_show_made_in = true,
-        enabled = false,
-        main_product = "ei-crushed-iron",
-        hide_from_player_crafting = true,
-    },
-    {
         name = "ei-crushed-iron-mechanical-parts",
         type = "recipe",
         category = "ei-crushing",
@@ -659,10 +643,6 @@ data:extend({
             {
                 type = "unlock-recipe",
                 recipe = "ei-glass"
-            },
-            {
-                type = "unlock-recipe",
-                recipe = "glass"
             },
             {
                 type = "unlock-recipe",

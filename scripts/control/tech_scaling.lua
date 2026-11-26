@@ -7,59 +7,97 @@ local ei_tech_scaling = {}
 --TECH SCALING
 --====================================================================================================
 
+-- technologies that always count for the price scaling (plus all their prerequisites)
+local WHITELIST_ROOTS = {
+    "ei-black-hole",
+    "railgun",
+    "fusion-reactor",
+    "mech-armor",
+    "tesla-weapons",
+    "ei-gauss-module",
+    "ei-plasma-turret",
+    "ei-neo-logistics",
+    "ei-farstation",
+}
+
+---Builds the whitelist of "important" technologies (the ones leading to the endgame, science
+---packs and planet discoveries, plus all their prerequisites). Only researching one of those
+---raises the technology price multiplier.
 function ei_tech_scaling.init()
     if ei_lib.config("no-tech-scaling") then return end
-    
-    if not storage.ei["tech_scaling"] then
-        storage.ei["tech_scaling"] = {}
-    end
 
-    -- switch for max Cost
-    local maxCost = ei_lib.switch_string(
+    storage.ei["tech_scaling"] = storage.ei["tech_scaling"] or {}
+
+    -- set max cost and start price
+    storage.ei["tech_scaling"].maxCost = ei_lib.switch_string(
         ei_data["tech_scaling"].switch_table,
         ei_lib.config("tech-scaling-maxCost")
     )
-
-    -- set max Cost and start price
-    storage.ei["tech_scaling"].maxCost = maxCost
     storage.ei["tech_scaling"].startPrice = ei_lib.config("tech-scaling-startPrice")
 
-    -- count total number of technologies
-    storage.ei["tech_scaling"].techCount = ei_lib.getn(prototypes.technology)
-end
-
-function ei_tech_scaling.on_research_finished()
-    if ei_lib.config("no-tech-scaling") then return end
-    maxCost = storage.ei["tech_scaling"].maxCost
-    startPrice = storage.ei["tech_scaling"].startPrice
-    techCount = storage.ei["tech_scaling"].techCount
-
-    -- do this for player force -> no support for multiple forces yet
-    force = game.forces[1]
-
-    local currentTechs = 0
-    -- do this for each technology
-    for _,tech in pairs(force.technologies) do
-        if tech.enabled then
-            if tech.prototype.research_unit_count_formula == nil then
-                if tech.researched then
-                    currentTechs = currentTechs + 1
-                end
-            end
+    -- collect root technologies
+    local whitelist = {}
+    local queue = {}
+    local function add(tech_name)
+        if not whitelist[tech_name] and prototypes.technology[tech_name] then
+            whitelist[tech_name] = true
+            table.insert(queue, tech_name)
         end
     end
-    
-    local formulaType = ei_lib.config("tech-scaling-curveForm")
-    local multiplier = ei_tech_scaling.get_multiplier(maxCost, techCount, startPrice, currentTechs, formulaType)
-    local additional_multiplier = ei_lib.config("tech-scaling-additionalMultiplier")
 
-    local total_multiplier = multiplier * additional_multiplier
-
-    if total_multiplier > 1000 then
-        total_multiplier = 1000
+    for _, tech_name in pairs(WHITELIST_ROOTS) do
+        add(tech_name)
+    end
+    for tech_name, _ in pairs(prototypes.technology) do
+        if ei_lib.contains(tech_name, "science-pack") or ei_lib.contains(tech_name, "discovery") then
+            add(tech_name)
+        end
     end
 
-    -- set multiplier
+    -- breadth first walk over all prerequisites
+    local index = 1
+    while index <= #queue do
+        local prerequisites = prototypes.technology[queue[index]].prerequisites
+        for prerequisite_name, _ in pairs(prerequisites or {}) do
+            add(prerequisite_name)
+        end
+        index = index + 1
+    end
+
+    storage.ei["tech_scale_whitelist"] = whitelist
+    storage.ei["tech_scaling"].techCount = #queue
+end
+
+
+---Recalculates the technology price multiplier after a research finished.
+function ei_tech_scaling.on_research_finished()
+    if ei_lib.config("no-tech-scaling") then return end
+    if not storage.ei["tech_scale_whitelist"] then return end
+
+    local scaling = storage.ei["tech_scaling"]
+    local whitelist = storage.ei["tech_scale_whitelist"]
+
+    -- only the player force is supported
+    local force = game.forces["player"]
+    if not force then return end
+
+    local current_techs = 0
+    for tech_name, tech in pairs(force.technologies) do
+        if whitelist[tech_name] and tech.enabled and tech.researched
+            and tech.prototype.research_unit_count_formula == nil then
+            current_techs = current_techs + 1
+        end
+    end
+
+    local multiplier = ei_tech_scaling.get_multiplier(
+        scaling.maxCost,
+        scaling.techCount,
+        scaling.startPrice,
+        current_techs,
+        ei_lib.config("tech-scaling-curveForm")
+    )
+
+    local total_multiplier = math.min(multiplier * ei_lib.config("tech-scaling-additionalMultiplier"), 1000)
     game.difficulty_settings.technology_price_multiplier = total_multiplier
 end
 

@@ -92,7 +92,7 @@ data:extend({
         icon = ei_tanks_item_path.."tank-1.png",
         icon_size = 64,
         subgroup = "storage",
-        order = "b[fluid]-b",
+        order = "b[fluid]-b[storage-tank]",
         place_result = "ei-tank-1",
         stack_size = 50
     },
@@ -102,7 +102,7 @@ data:extend({
         icon = ei_tanks_item_path.."tank-2.png",
         icon_size = 64,
         subgroup = "storage",
-        order = "b[fluid]-c",
+        order = "b[fluid]-e[storage-tank]",
         place_result = "ei-tank-2",
         stack_size = 50
     },
@@ -112,7 +112,7 @@ data:extend({
         icon = ei_tanks_item_path.."tank-3.png",
         icon_size = 64,
         subgroup = "storage",
-        order = "b[fluid]-d",
+        order = "b[fluid]-d[storage-tank]",
         place_result = "ei-tank-3",
         stack_size = 50
     },

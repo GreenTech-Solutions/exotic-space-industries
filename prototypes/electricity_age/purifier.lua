@@ -239,6 +239,10 @@ data:extend({
                 type = "unlock-recipe",
                 recipe = "ei-dirty-water-landfill"
             },
+            {
+                type = "unlock-recipe",
+                recipe = "ei-dirty-water-fluorite"
+            },
         },
         unit = {
             count = 100,
@@ -481,7 +485,7 @@ data:extend({
     {
         name = "ei-morphium-fluorite",
         type = "recipe",
-        category = "crafting-with-fluid",
+        category = "ei-purifier",
         energy_required = 2,
         ingredients = {
             {type = "fluid", name = "ei-morphium", amount = 50},
@@ -529,6 +533,7 @@ data:extend({
         subgroup = "ei-refining-purified",
         order = "a-f",
     },
+
     {
         name = "ei-dirty-water-landfill",
         type = "recipe",
@@ -544,4 +549,21 @@ data:extend({
         enabled = false,
         main_product = "landfill",
     },
+
+    {
+        name = "ei-dirty-water-fluorite",
+        type = "recipe",
+        category = "ei-purifier",
+        energy_required = 1,
+        ingredients = {
+            {type = "fluid", name = "ei-dirty-water", amount = 10},
+        },
+        results = {
+            {type = "item", name = "ei-fluorite", amount = 1, probability = 0.1}
+        },
+        always_show_made_in = true,
+        enabled = false,
+        main_product = "ei-fluorite",
+    },
+
 })

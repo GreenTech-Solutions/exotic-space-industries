@@ -9,7 +9,6 @@ local remove_entities = {
     "ei-core-patch",
     "ei-cryoflux-patch",
     "ei-phytogas-patch",
-    "ei-morphium-patch",
     "ei-ammonia-patch",
     "ei-coal-gas-patch",
     "ei-gaia-tree-01",
