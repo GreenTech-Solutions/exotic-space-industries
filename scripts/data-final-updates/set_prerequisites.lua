@@ -2,6 +2,7 @@
 
 -- ==========================================================================================================
 
+local science_pack_prototypes = require("lib/science_packs").get_prototypes()
 local science_pack_unlock = {["ei-dark-age-tech"]="ei-dark-age"}
 local tiered_tech = {}
 local name = ""
@@ -21,7 +22,7 @@ for _,tech in pairs(data.raw.technology) do
       data.raw.technology[tech.name].prerequisites = {}
       for i,v in ipairs(tech.effects) do
         if v.type == "unlock-recipe" then
-          if data.raw.tool[v.recipe] then 
+          if science_pack_prototypes[v.recipe] then 
             if not science_pack_unlock[v.recipe] then 
               science_pack_unlock[v.recipe] = tech.name
             end
@@ -76,7 +77,8 @@ if ei_lib.config("tech-tree-flatten") then
     name = "advanced-"..tech.name
     if data.raw.technology[name] then ei_lib.add_prerequisite(tech.name,name) end
 
-    mod_prefix,name = tech.name:match("^(.+)-(.+)")
+    local mod_prefix
+    mod_prefix, name = tech.name:match("^(.+)-(.+)")
     if name then 
       name = mod_prefix.."-".."advanced".."-"..name
       if data.raw.technology[name] and name ~= tech.name then ei_lib.add_prerequisite(tech.name,name) end
@@ -156,7 +158,7 @@ ei_lib.set_prerequisites("wdm_home_planet",{})
 ei_lib.set_prerequisites("ei-quantum-age",{"ei-advanced-computer-age-tech","ei-alien-computer-age-tech"})
 
 ei_lib.set_prerequisites("automation-2",{"automation","ei-electricity-age"})
-ei_lib.set_prerequisites("ei_fueler",{"ei-electricity-age"})
+ei_lib.set_prerequisites("ei-fueler",{"ei-electricity-age"})
 
 ei_lib.add_prerequisite("laser-shooting-speed-1","laser")
 ei_lib.add_prerequisite("laser-turret","laser")
@@ -168,6 +170,7 @@ ei_lib.add_prerequisite("ei-black-hole-exploration","ei-fusion-drive")
 ei_lib.set_prerequisites("burner-mechanics",{"ei-dark-age"})
 ei_lib.set_prerequisites("kr-automation-core",{"ei-dark-age"})
 ei_lib.set_prerequisites("kr-iron-pickaxe",{"ei-dark-age"})
+ei_lib.set_prerequisites("kr-advanced-pickaxe",{"steel-axe"})
 
 ei_lib.set_prerequisites("radar",{"ei-electricity-power"})
 ei_lib.set_prerequisites("electric-energy-accumulators",{"ei-electricity-power"})
@@ -188,6 +191,9 @@ ei_lib.set_prerequisites("nuclear-power",{"uranium-mining"})
 
 ei_lib.set_prerequisites("kr-fusion-energy",{"lithium-processing","nuclear-power"})
 ei_lib.set_prerequisites("captive-biter-spawner",{"cryogenic-science-pack","biter-egg-handling"})
+
+ei_lib.set_prerequisites("kiln-smelting",{"ei-burner-assembler"})
+
 
 -- ======================================================================================
 

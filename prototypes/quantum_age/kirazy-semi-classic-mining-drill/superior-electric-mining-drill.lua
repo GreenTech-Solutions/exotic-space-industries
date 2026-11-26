@@ -6,8 +6,8 @@
 ----------------------------------------------------------------------------------------------------
 -- Mining Drill Global Constants and Functions
 ----------------------------------------------------------------------------------------------------
-electric_drill_animation_speed = 0.4
-electric_drill_animation_sequence = {
+local electric_drill_animation_speed = 0.4
+local electric_drill_animation_sequence = {
     1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
     21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
@@ -27,7 +27,7 @@ electric_drill_animation_sequence = {
     21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1
 }
 
-electric_drill_animation_shadow_sequence = {
+local electric_drill_animation_shadow_sequence = {
     1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
     21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
@@ -47,7 +47,7 @@ electric_drill_animation_shadow_sequence = {
     21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, 1
 }
 
-function electric_mining_drill_smoke()
+local function electric_mining_drill_smoke()
     return
     {
         priority = "high",
@@ -63,7 +63,7 @@ function electric_mining_drill_smoke()
     }
 end
 
-function electric_mining_drill_smoke_front()
+local function electric_mining_drill_smoke_front()
     return
     {
         priority = "high",
@@ -79,7 +79,7 @@ function electric_mining_drill_smoke_front()
     }
 end
 
-function electric_mining_drill_animation()
+local function electric_mining_drill_animation()
     return
     {
         priority = "high",
@@ -96,7 +96,7 @@ function electric_mining_drill_animation()
     }
 end
 
-function electric_mining_drill_shadow_animation()
+local function electric_mining_drill_shadow_animation()
     return
     {
         priority = "high",
@@ -113,7 +113,7 @@ function electric_mining_drill_shadow_animation()
     }
 end
 
-function electric_mining_drill_horizontal_animation()
+local function electric_mining_drill_horizontal_animation()
     return
     {
         priority = "high",
@@ -130,7 +130,7 @@ function electric_mining_drill_horizontal_animation()
     }
 end
 
-function electric_mining_drill_horizontal_front_animation()
+local function electric_mining_drill_horizontal_front_animation()
     return
     {
         priority = "high",
@@ -147,7 +147,7 @@ function electric_mining_drill_horizontal_front_animation()
     }
 end
 
-function electric_mining_drill_horizontal_shadow_animation()
+local function electric_mining_drill_horizontal_shadow_animation()
     return
     {
         priority = "high",
@@ -164,7 +164,7 @@ function electric_mining_drill_horizontal_shadow_animation()
     }
 end
 
-function electric_mining_drill_status_colors()
+local function electric_mining_drill_status_colors()
     return
     {
         -- If no_power, idle, no_minable_resources, disabled, insufficient_input or full_output is used, always_draw of corresponding layer must be set to true to draw it in those states.
@@ -182,7 +182,7 @@ function electric_mining_drill_status_colors()
     }
 end
 
-function electric_mining_drill_status_leds_working_visualisation()
+local function electric_mining_drill_status_leds_working_visualisation()
     local led_blend_mode = nil -- "additive"
     local led_tint = {1,1,1,0.5}
     return
@@ -229,7 +229,7 @@ function electric_mining_drill_status_leds_working_visualisation()
     }
 end
 
-function electric_mining_drill_add_light_offsets(t)
+local function electric_mining_drill_add_light_offsets(t)
     t.north_position = { 1.0 - 11/64, -2.0 - 10/64}
     t.east_position =  { 1.5 - 13/64, -1.5 +  8/64}
     t.south_position = { 1.0 - 10/64,  0.5 - 12/64}
@@ -259,8 +259,11 @@ local circuit_connectors = circuit_connector_definitions.create_vector(universal
 ----------------------------------------------------------------------------------------------------
 
 
--- Remnants
-local mining_drill_remnants = data.raw["corpse"]["electric-mining-drill-remnants"]
+-- Remnants: an own copy per drill tier (3.2.0). Previously both kirazy drills edited the vanilla
+-- "electric-mining-drill-remnants", so the last loaded tier overwrote the other one (and the
+-- vanilla drill got kirazy remnants as well).
+local mining_drill_remnants = table.deepcopy(data.raw["corpse"]["electric-mining-drill-remnants"])
+mining_drill_remnants.name = "ei-superior-electric-mining-drill-remnants"
 mining_drill_remnants.icon = ei_graphics_item_path.."advanced-electric-mining-drill.png"
 mining_drill_remnants.icon_size = 64
 --mining_drill_remnants.icon_mipmaps = 4
@@ -277,8 +280,9 @@ mining_drill_remnants.animation = make_rotated_animation_variations_from_sheet (
     scale = 0.5,
 })
 
--- Explosion
-local mining_drill_explosion = data.raw["explosion"]["electric-mining-drill-explosion"]
+-- Explosion: an own copy per drill tier (same reason as the remnants)
+local mining_drill_explosion = table.deepcopy(data.raw["explosion"]["electric-mining-drill-explosion"])
+mining_drill_explosion.name = "ei-superior-electric-mining-drill-explosion"
 mining_drill_explosion.icon = ei_graphics_item_path.."advanced-electric-mining-drill.png"
 mining_drill_explosion.icon_size = 64
 --mining_drill_explosion.icon_mipmaps = 4
@@ -1597,6 +1601,8 @@ mining_drill.integration_patch = {
 
 mining_drill.name = "ei-superior-electric-mining-drill"
 mining_drill.minable.result = "ei-superior-electric-mining-drill"
+mining_drill.corpse = mining_drill_remnants.name
+mining_drill.dying_explosion = mining_drill_explosion.name
 -- mining_drill.next_upgrade = "ei-superior-electric-mining-drill"
 mining_drill.fast_replaceable_group = "electric-mining-drill"
 mining_drill.mining_speed = 1.25
@@ -1622,7 +1628,7 @@ data:extend({
     {
         name = "ei-superior-electric-mining-drill",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -1656,4 +1662,4 @@ data:extend({
     },
 })
 
-data:extend({mining_drill})
+data:extend({mining_drill, mining_drill_remnants, mining_drill_explosion})

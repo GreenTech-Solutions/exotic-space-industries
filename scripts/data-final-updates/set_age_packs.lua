@@ -11,7 +11,6 @@ ei_lib.set_age_packs("electronics","steam-age")
 ei_lib.set_age_packs("steel-axe","steam-age")
 ei_lib.set_age_packs("oil-processing","steam-age")
 ei_lib.set_age_packs("logistic-system","electricity-age")
-ei_lib.set_age_packs("cliff-explosives","computer-age")
 ei_lib.set_age_packs("refined-flammables-6","computer-age")
 ei_lib.set_age_packs("rocket-fuel","computer-age")
 ei_lib.set_age_packs("rocket-silo","computer-age")
@@ -39,11 +38,14 @@ ei_lib.copy_science_packs("science-pack-productivity","promethium-science-pack")
 ei_lib.set_age_packs("ei-electricity-power","electricity-age")
 ei_lib.set_age_packs("electric-engine","electricity-age")
 ei_lib.set_age_packs("electric-mining-drill","electricity-age")
-ei_lib.set_age_packs("ei_fueler","electricity-age")
+ei_lib.set_age_packs("ei-fueler","electricity-age")
+ei_lib.set_age_packs("cliff-explosives","electricity-age")
 
 if ei_lib.config("no-triggers") then
   for _,tech in pairs(data.raw.technology) do
-    if data.raw.technology[tech.name]["research_trigger"] then 
+    local trigger = data.raw.technology[tech.name]["research_trigger"]
+    -- "scripted" triggers (alien tech tree technologies) are unlocked by the mod itself, not by gameplay
+    if trigger and trigger.type ~= "scripted" then
       if tech.age then ei_lib.set_age_packs(tech.name,tech.age)
       else ei_lib.set_age_packs(tech.name,"computer-age") end
     end 
@@ -54,6 +56,8 @@ ei_lib.set_age_packs("copper-processing","steam-age")
 ei_lib.set_age_packs("iron-processing","steam-age")
 ei_lib.set_age_packs("burner-mechanics","dark-age")
 ei_lib.set_age_packs("basic-logistics","dark-age")
+ei_lib.set_age_packs("kiln-smelting","dark-age")
 
 ei_lib.set_age_packs("oil-processing","electricity-age")
 ei_lib.set_age_packs("kr-gas-power-station","electricity-age")
+ei_lib.set_age_packs("kr-advanced-pickaxe","electricity-age")

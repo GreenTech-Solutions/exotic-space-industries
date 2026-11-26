@@ -1,0 +1,15 @@
+# files that should not be modified
+*.png binary
+*.blend binary export-ignore
+
+# files that should not get included in a release zip
+README.md export-ignore
+.vscode export-ignore
+.git export-ignore
+.github export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+# check settings and portal tooling, not part of the mod
+.luacheckrc export-ignore
+.emmyrc.json export-ignore
+tools export-ignore

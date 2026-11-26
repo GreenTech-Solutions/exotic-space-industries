@@ -22,14 +22,13 @@ data:extend({
     {
         name = "ei-excavator",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 2,
         ingredients =
         {
-            -- {type="item", name="ei-electric-stone-quarry", amount=4},
-            {type="item", name="ei-advanced-motor", amount=8},
-            {type="item", name="steel-plate", amount=24},
-            {type="item", name="ei-steel-mechanical-parts", amount=40}
+            {type="item", name="electric-mining-drill", amount=4},
+            {type="item", name="steel-plate", amount=100},
+            {type="item", name="ei-steel-mechanical-parts", amount=50}
         },
         results = {{type="item", name="ei-excavator", amount=1}},
         enabled = false,
@@ -41,7 +40,7 @@ data:extend({
         type = "technology",
         icon = ei_graphics_tech_2_path.."excavator.png",
         icon_size = 256,
-        prerequisites = {"automation-3"},
+        prerequisites = {"ei-electricity-age"},
         effects = {
             {
                 type = "unlock-recipe",
@@ -50,10 +49,10 @@ data:extend({
         },
         unit = {
             count = 100,
-            ingredients = ei_data.science["alien-computer-age"],
+            ingredients = ei_data.science["electricity-age"],
             time = 20
         },
-        age = "alien-computer-age",
+        age = "electricity-age",
     },
     {
         name = "ei-excavator",
@@ -147,7 +146,7 @@ data:extend({
     {
         name = "ei-excavator-running",
         type = "recipe",
-        category = "ei-excavator",
+        categories = {"ei-excavator"},
         energy_required = 5,
         ingredients = {
             {type = "fluid", name = "water", amount = 2*5},

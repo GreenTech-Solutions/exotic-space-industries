@@ -32,12 +32,49 @@ heat_furnace_entity.energy_source = {
   min_working_temperature = 185,
   specific_heat = ei_data.specific_heat,
   max_transfer = '10MW',
-  connections = {
-      {position = { -1.0,  0.0 }, direction = defines.direction.west},
-      {position = {  0.0,  1.0 }, direction = defines.direction.south},
-      {position = {  1.0,  0.0 }, direction = defines.direction.east},
-      {position = {  0.0, -1.0 }, direction = defines.direction.north}
-  }
+            connections = {
+                {
+                    position = {0.5,0.5},
+                    direction = defines.direction.east,
+                    type = "output",
+                },
+                {
+                    position = {-0.5,0.5},
+                    direction = defines.direction.west,
+                    type = "output",
+                },
+                {
+                    position = {0.5,-0.5},
+                    direction = defines.direction.east,
+                    type = "output",
+                },
+                {
+                    position = {-0.5,-0.5},
+                    direction = defines.direction.west,
+                    type = "output",
+                },
+
+                {
+                    position = {0.5,0.5},
+                    direction = defines.direction.south,
+                    type = "output",
+                },
+                {
+                    position = {-0.5,0.5},
+                    direction = defines.direction.south,
+                    type = "output",
+                },
+                {
+                    position = {0.5,-0.5},
+                    direction = defines.direction.north,
+                    type = "output",
+                },
+                {
+                    position = {-0.5,-0.5},
+                    direction = defines.direction.north,
+                    type = "output",
+                },
+            }
 }
 
 local heat_furnace_item = table.deepcopy(data.raw["item"]["steel-furnace"])

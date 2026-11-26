@@ -1,0 +1,11 @@
+**A fork of [Exotic Space Industries](https://mods.factorio.com/mod/exotic-space-industries) by Eliont, maintained for razi-protocol.** All credit for the mod goes to Eliont. Prototype and setting names are unchanged, so a save with the original mod can switch to this one. Source: [GreenTech-Solutions/exotic-space-industries](https://github.com/GreenTech-Solutions/exotic-space-industries).
+
+# Exotic Space Industries
+
+Welcome to Gaia, the Shattered Crystal World — a desolate yet breathtakingly beautiful planet locked in an eternal frost, where the air itself has crystallized into shimmering, fragile lattices that refract light like a prism. Beneath it's frozen surface lies the remnants of an ancient, long-lost civilization whose mastery over matter and energy reached heights beyond comprehension. This enigmatic race thrived on harnessing Morphium, a mysterious liquid imbued with unparalleled potential.
+
+The environment here is as hostile as it is awe-inspiring. Towering magnetic tempests ravage the skies, unleashing cascades of electric fury that dance across the horizon. Lightning arcs between crystalline structures, creating dazzling displays of destruction. The ground trembles beneath your feet as rogue electromagnetic pulses disrupt machinery and scramble signals. Yet amidst the chaos lies opportunity — for those daring enough to brave Gaia perils, the rewards are boundless. Resources are abundant, technology far beyond anything you’ve encountered awaits discovery, and the secrets of Morphium hold the key to unlocking unimaginable power.
+
+Your mission is clear: establish a foothold on this unforgiving world, trace it progress from Gaia Dark Age to stage where ever taming of black hole is not a science fiction anymore. Will you rise to meet the challenge, bending nature and technology to your will? Or will the relentless storms and treacherous terrain claim another victim?
+
+In the icy silence of Gaia, only one thing is certain — survival demands innovation, resilience, and courage. Harness the storm, master the Morphium, and carve your legacy into the heart of the crystal world.

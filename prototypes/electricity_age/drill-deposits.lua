@@ -546,7 +546,7 @@ data:extend({
 					name = "ei-cryoflux",
 					amount_min = 20,
 					amount_max = 20,
-					probability = 1,
+					independent_probability = 1,
 				}
 			},
       fluid_amount = 1,
@@ -606,7 +606,7 @@ data:extend({
 					name = "ei-phythogas",
 					amount_min = 20,
 					amount_max = 20,
-					probability = 1,
+					independent_probability = 1,
 				}
 			},
       fluid_amount = 1,
@@ -640,64 +640,7 @@ data:extend({
   order = "y1",
   category = "resource"
   },
-  {
-    type = "resource",
-    name = "ei-morphium-patch",
-    icon = ei_graphics_item_2_path.."morphium-patch.png",
-    icon_size = 64,
-    flags = {"placeable-neutral"},
-    category = "basic-fluid",
-    order = "a-b-a",
-    infinite = false,
-    highlight = true,
-    minimum = 600000,
-    normal = 1200000,
-    --infinite_depletion_amount = 10,
-    resource_patch_search_radius = 12,
-    tree_removal_probability = 1,
-    tree_removal_max_distance = 32 * 32,
-    minable =
-    {
-      mining_time = 1,
-			results =
-			{
-				{
-					type = "fluid",
-					name = "ei-morphium",
-					amount_min = 20,
-					amount_max = 20,
-					probability = 1,
-				}
-			},
-    },
-    collision_box = {{-2.4, -2.4}, {2.4, 2.4}},
-    --collision_mask = {"item-layer", "water-tile"},
-    selection_box = {{-1.5, -1.5}, {1.5, 1.5}},
-    autoplace = ei_autoplace("ei-morphium-patch", "gaia"),
-    stage_counts = {0},
-    stages =
-    {
-      sheet =
-      {
-        filename = ei_graphics_entity_2_path.."morphium-patch.png",
-        priority = "extra-high",
-        width = 473,
-        height = 267,
-        scale = 0.4,
-        frame_count = 1,
-        variation_count = 1
-      }
-    },
-    map_color = {r=0.04, g=0.3, b=0.3},
-    map_grid = false
-  },
-  {
-  type = "autoplace-control",
-  name = "ei-morphium-patch",
-  richness = true,
-  order = "z1",
-  category = "resource"
-  },
+
   {
     type = "resource",
     name = "ei-ammonia-patch",
@@ -724,7 +667,7 @@ data:extend({
 					name = "ei-ammonia-gas",
 					amount_min = 20,
 					amount_max = 20,
-					probability = 1,
+					independent_probability = 1,
 				}
 			},
       fluid_amount = 1,
@@ -784,7 +727,7 @@ data:extend({
 					name = "ei-coal-gas",
 					amount_min = 20,
 					amount_max = 20,
-					probability = 1,
+					independent_probability = 1,
 				}
 			},
       fluid_amount = 1,

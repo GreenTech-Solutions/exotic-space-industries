@@ -13,6 +13,9 @@ require("alien-stabilizer")
 require("gaia-tiles")
 -- add new trees
 require("gaia-trees")
+
+-- minable Gaia boulders (3.2.0), scattered on Gaia and used in the ruins
+require("gaia-boulders")
 -- add gate
 require("gate")
 -- add crystal accumulator
@@ -23,3 +26,20 @@ require("farstation")
 require("alien-structures")
 -- add other
 require("gaia-planet")
+-- 3.1.0: Alien chain / Gaia hub (design doc "ESI: Alien chain and Gaia hub")
+-- resonance data item (repair drop + synthesizer product)
+require("resonance-data")
+-- resonance synthesizer (clone of the small simulator) + tier 1 technology
+require("resonance-synthesizer")
+-- alien resonance pack + alien tier 4 technology "resonant computation"
+require("resonance-pack")
+-- void rift generator + alien tier 5 technology "threshold engineering"
+require("void-rift-generator")
+-- conduit: lightning attractor that harvests the Gaia storms (alien tree tier 1) + ei-conduit-gaia
+require("conduit")
+-- drone port + script drones (3.2.0, alien tier 2)
+require("drone-port")
+-- planet samples = gate calibration keys (3.2.0), after the gate and the Gaia planet
+require("planet-samples")
+-- alien terminal: access point of the alien tech tree + broken terminal ruin (3.2.0, alien tier 1)
+require("alien-console")

@@ -12,6 +12,7 @@ data:extend({
       allowed_values = {"Default", "Very Cheap", "Cheap", "Expensive", "Very Expensive"},
       order  = "a1",
   },
+
   {
       name = "ei-tech-scaling-startPrice",
       type = "int-setting",
@@ -21,6 +22,7 @@ data:extend({
       maximum_value = 10000,
       order  = "a2",
   },
+
   {
       name = "ei-tech-scaling-additionalMultiplier",
       type = "int-setting",
@@ -30,6 +32,7 @@ data:extend({
       maximum_value = 100,
       order  = "a2-1",
   },
+
   {
       name = "ei-tech-scaling-curveForm",
       type = "string-setting",
@@ -38,6 +41,7 @@ data:extend({
       allowed_values = {"linear", "quadratic", "exponential"},
       order  = "a3",
   },
+
   {
       name = "ei-pipe-to-ground-length",
       type = "int-setting",
@@ -47,6 +51,7 @@ data:extend({
       maximum_value = 40,
       order  = "a5",
   },
+
   {
       name = "ei-nuclear-reactor-energy-output",
       type = "string-setting",
@@ -55,6 +60,7 @@ data:extend({
       allowed_values = {"75MW", "150MW", "200MW", "225MW", "300MW"},
       order  = "a6",
   },
+
   {
       name = "ei-nuclear-reactor-remove-bonus",
       type = "bool-setting",
@@ -62,6 +68,7 @@ data:extend({
       default_value = true,
       order  = "a7",
   },
+
   {
       name = "ei-barrel-capacity",
       type = "int-setting",
@@ -71,6 +78,7 @@ data:extend({
       maximum_value = 5000,
       order  = "a8",
   },
+
   {
       name = "ei-loader-prototype-complexity",
       type = "bool-setting",
@@ -78,15 +86,17 @@ data:extend({
       default_value = true,
       order  = "a9",
   },
+
   {
       name = "ei-rocket-lift-capacity-buff",
       type = "int-setting",
       setting_type = "startup",
-      default_value = 0,
+      default_value = 10,
       minimum_value = 0,
       maximum_value = 20,
       order  = "a10",
   },
+
   {
       name = "ei-beacon-overload",
       type = "bool-setting",
@@ -94,6 +104,7 @@ data:extend({
       default_value = true,
       order  = "b1",
   },
+
   {
       name = "ei-em_train_glow",
       type = "bool-setting",
@@ -101,6 +112,7 @@ data:extend({
       default_value = true,
       order  = "b1b",
   },
+
   {
       name = "ei-em_train_glow_timetolive",
       type = "int-setting",
@@ -110,6 +122,7 @@ data:extend({
       maximum_value = 600,
       order  = "b1bb",
   },
+
   {
       name = "ei-em_charger_glow",
       type = "bool-setting",
@@ -117,6 +130,7 @@ data:extend({
       default_value = true,
       order  = "b1c",
   },
+
   {
       name = "ei-em_charger_glow_timetolive",
       type = "int-setting",
@@ -126,6 +140,7 @@ data:extend({
       maximum_value = 600,
       order  = "b1d",
   },
+
   {
       name = "ei-em_updater_que",
       type = "string-setting",
@@ -134,6 +149,7 @@ data:extend({
       allowed_values = {"Off", "Beam", "Ring"},
       order  = "b2",
   },
+
   {
       name = "ei-em_updater_que_width",
       type = "int-setting",
@@ -143,6 +159,7 @@ data:extend({
       maximum_value = 32,
       order  = "b3",
   },
+
   {
       name = "ei-em_updater_que_transparency",
       type = "int-setting",
@@ -152,6 +169,7 @@ data:extend({
       maximum_value = 100,
       order  = "b3b",
   },
+
   {
       name = "ei-em_updater_que_timetolive",
       type = "int-setting",
@@ -161,6 +179,7 @@ data:extend({
       maximum_value = 600,
       order  = "b3c",
   },
+
   {
       name = "ei-max_updates_per_tick",
       type = "int-setting",
@@ -170,8 +189,9 @@ data:extend({
       maximum_value = 100,
       order  = "b5",
   },
+
   {
-      name = "ei_ticks_per_full_update",
+      name = "ei-ticks_per_full_update",
       type = "int-setting",
       setting_type = "startup",
       default_value = 60,
@@ -179,6 +199,7 @@ data:extend({
       maximum_value = localMaximumFullUpdateTicks,
       order  = "b6",
   },
+
   {
       name = "ei-expanded-gui",
       type = "bool-setting",
@@ -186,20 +207,25 @@ data:extend({
       default_value = true,
       order  = "c1a",
   },
+
   {
       name = "ei-slag",
       type = "bool-setting",
       setting_type = "startup",
-      default_value = true,
+      default_value = false,
       order  = "c1b",
+      hidden = true
   },
+
   {
       name = "ei-ash",
       type = "bool-setting",
       setting_type = "startup",
-      default_value = true,
+      default_value = false,
       order  = "c1c",
+      hidden = true
   },
+
   {
       name = "ei-tech-tree-flatten",
       type = "bool-setting",
@@ -211,9 +237,18 @@ data:extend({
       name = "ei-no-triggers",
       type = "bool-setting",
       setting_type = "startup",
-      default_value = true,
+      default_value = false,
       order  = "c1e",
   },
+
+  {
+      name = "ei-debloat",
+      type = "bool-setting",
+      setting_type = "startup",
+      default_value = true,
+      order  = "c1f",
+  },
+
   {
       name = "ei-no-tech-scaling",
       type = "bool-setting",
@@ -221,11 +256,12 @@ data:extend({
       default_value = false,
       order  = "c1f",
   },
+
 })
 
 data:extend({
 {
-    name = "ei_fueler_max_updates_per_tick",
+    name = "ei-fueler_max_updates_per_tick",
     type = "int-setting",
     setting_type = "startup",
     setting_type = "startup",
@@ -236,7 +272,7 @@ data:extend({
     hidden = true
 },
 {
-    name = "ei_fueler_range",
+    name = "ei-fueler_range",
     type = "int-setting",
     setting_type = "startup",
     default_value = 20,
@@ -248,7 +284,7 @@ data:extend({
 
 data:extend({
 {
-    name = "ei_trains_max_updates_per_tick",
+    name = "ei-trains_max_updates_per_tick",
     type = "int-setting",
     setting_type = "startup",
     default_value = 1,
@@ -256,5 +292,22 @@ data:extend({
     maximum_value = 100,
     order  = "e1",
     hidden = true
+},
+})
+
+data:extend({
+{
+    name = "ei-gaia-freezing",
+    type = "bool-setting",
+    setting_type = "startup",
+    default_value = true,
+},
+-- 3.1.0: Gaia storm EMP (scripts/control/storm_emp.lua); can be toggled during the game
+{
+    name = "ei-gaia-storm-emp",
+    type = "bool-setting",
+    setting_type = "runtime-global",
+    default_value = true,
+    order = "g1",
 },
 })

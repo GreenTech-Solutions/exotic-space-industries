@@ -1,3 +1,5 @@
+local util = require("scripts/control/util")
+
 local model = {}
 
 --====================================================================================================
@@ -132,41 +134,55 @@ end
 
 --RENDERING RELATED
 ------------------------------------------------------------------------------------------------------
+-- Range circles and connection lines are drawn only for the player that selected a stabilizer or
+-- holds one in the cursor. Render objects are stored per player:
+--   storage.ei.stabilizer_renders[player_index] = { {render = LuaRenderObject, source = entity,
+--                                                    target = entity|nil, type = "range"|"connection"} }
+
+---Returns (and creates) the render list of a player.
+local function player_renders(player)
+    storage.ei.stabilizer_renders = storage.ei.stabilizer_renders or {}
+    local renders = storage.ei.stabilizer_renders
+    renders[player.index] = renders[player.index] or {}
+    return renders[player.index]
+end
+
+---Save migration: previous versions kept one shared render list for all players.
+function model.migrate()
+    local old = storage.ei.selected_render
+    if old then
+        for _, data in pairs(old) do
+            if type(data) == "table" then
+                util.destroy_render(data.render)
+            end
+        end
+        storage.ei.selected_render = nil
+    end
+end
+
 
 function model.draw_connection(source, target, player)
 
-    if not model.check_entity(source) then
+    if not model.check_entity(source) or not model.check_entity(target) then
         return
     end
 
-    if not model.check_entity(target) then
-        return
-    end
-
-    if not storage.ei.selected_render then
-        storage.ei.selected_render = {}
-    end
-
-    -- draw a line between the two entities
-    render = rendering.draw_line{
+    local render = rendering.draw_line{
         color = {r = 0, g = 1, b = 0},
         width = 0.2,
         from = source.position,
         to = target.position,
         surface = source.surface,
         players = {player},
-        forces = {source.force},
         draw_on_ground = true,
     }
 
-    table.insert(storage.ei.selected_render, {
-        ["render"] = render,
-        ["source"] = source,
-        ["target"] = target,
-        ["type"] = "connection"
+    table.insert(player_renders(player), {
+        render = render,
+        source = source,
+        target = target,
+        type = "connection",
     })
-
-    -- game.print(source.unit_number)
 
 end
 
@@ -177,72 +193,54 @@ function model.draw_stabilizer_range(entity, player)
         return
     end
 
-    if not storage.ei.selected_render then
-        storage.ei.selected_render = {}
-    end
+    local renders = player_renders(player)
 
-    -- check if this entity already has a range circle
-
-    for _, render in pairs(storage.ei.selected_render) do
-        if render.type == "range" and render.source == entity then
+    -- only one range circle per stabilizer
+    for _, data in pairs(renders) do
+        if data.type == "range" and data.source == entity then
             return
         end
     end
 
     local range = model.stabilizers[entity.name]
-    local scale = range/4 -- 1 <-> 2.5 + 1.5 tiles = 4 tiles
+    local scale = range / 4 -- 1 <-> 2.5 + 1.5 tiles = 4 tiles
 
-    -- draw a circle around the entity
-
-    render = rendering.draw_sprite{
+    local render = rendering.draw_sprite{
         sprite = "ei-stabilizer-radius",
         target = entity,
         surface = entity.surface,
         players = {player},
-        forces = {entity.force},
         render_layer = "radius-visualization",
         x_scale = scale,
         y_scale = scale,
     }
 
-    table.insert(storage.ei.selected_render, {
-        ["render"] = render,
-        ["source"] = entity,
-        ["type"] = "range"
+    table.insert(renders, {
+        render = render,
+        source = entity,
+        type = "range",
     })
 
 end
 
 
+---Removes every rendering (of every player) that belongs to a removed stabilizer/matter machine.
 function model.remove_rendering(entity)
 
-    if not model.check_entity(entity) then
+    local all_renders = storage.ei.stabilizer_renders
+    if not all_renders then
         return
     end
 
-    -- remove this entity from rendering
-    -- assume it is a matter machine
-
-    for _, render in pairs(storage.ei.selected_render) do
-        if render.type == "connection" and render.target == entity then
-            render.render.destroy()
-            table.remove(storage.ei.selected_render, _)
+    for _, renders in pairs(all_renders) do
+        -- iterate backwards so table.remove does not skip entries
+        for i = #renders, 1, -1 do
+            local data = renders[i]
+            if data.source == entity or data.target == entity then
+                util.destroy_render(data.render)
+                table.remove(renders, i)
+            end
         end
-    end
-
-    -- assume it is a stabilizer
-
-    for _, render in pairs(storage.ei.selected_render) do
-        if render.type == "range" and render.source == entity then
-            render.render.destroy()
-            table.remove(storage.ei.selected_render, _)
-        end
-
-        if render.type == "connection" and render.source == entity then
-            render.render.destroy()
-            table.remove(storage.ei.selected_render, _)
-        end
-
     end
 
 end
@@ -254,30 +252,33 @@ function model.clear_rendering(player)
         return
     end
 
-    if not player.cursor_stack then
-        return
-    end
-
     -- dont clear rendering if player has stabilizer or matter machine in cursor
-    if player.cursor_stack.valid_for_read then
-        if model.stabilizers[player.cursor_stack.name] then
-            return
-        end
-
-        if model.matter_machines[player.cursor_stack.name] then
+    local cursor = player.cursor_stack
+    if cursor and cursor.valid_for_read then
+        if model.stabilizers[cursor.name] or model.matter_machines[cursor.name] then
             return
         end
     end
 
-    if storage.ei.selected_render then
-        for _, render in pairs(storage.ei.selected_render) do
-            render = render.render
-            render.destroy()
-        end
+    local renders = player_renders(player)
+    for _, data in pairs(renders) do
+        util.destroy_render(data.render)
     end
 
-    storage.ei.selected_render = {}
+    storage.ei.stabilizer_renders[player.index] = nil
 
+end
+
+
+---Drops all renderings of a player (player removed from the game).
+function model.clear_player(player_index)
+    local renders = storage.ei.stabilizer_renders and storage.ei.stabilizer_renders[player_index]
+    if renders then
+        for _, data in pairs(renders) do
+            util.destroy_render(data.render)
+        end
+        storage.ei.stabilizer_renders[player_index] = nil
+    end
 end
 
 
@@ -288,43 +289,24 @@ function model.stabilizer_selected(player, entity)
     end
 
     local range = model.stabilizers[entity.name]
-    local matter_machines = model.find_in_range("matter_machine",entity.surface, entity.position, range)
+    local matter_machines = model.find_in_range("matter_machine", entity.surface, entity.position, range)
 
     -- draw lines to all matter machines
-
-    for _, e in pairs(matter_machines) do
-        model.draw_connection(entity, e, player)
+    for _, machine in pairs(matter_machines) do
+        model.draw_connection(entity, machine, player)
     end
 
 end
-
-
---[[
-function model.matter_machine_selected(player, entity)
-
-end
-]]
 
 
 function model.stabilizer_on_cursor(player)
 
-    -- get player position and find all stabilizers in screen range
+    -- find all stabilizers in screen range around the player
+    local stabilizers = model.find_in_range("stabilizer", player.surface, player.position, 100)
 
-    local position = player.position
-
-    if not position then
-        return
-    end
-
-    local stabilizers = model.find_in_range("stabilizer", player.surface, position, 100)
-
-    -- draw circle for every stabilizer
-
-    for _, e in pairs(stabilizers) do
-        model.draw_stabilizer_range(e, player)
-
-        -- draw lines to all matter machines
-        model.stabilizer_selected(player, e)
+    for _, stabilizer in pairs(stabilizers) do
+        model.draw_stabilizer_range(stabilizer, player)
+        model.stabilizer_selected(player, stabilizer)
     end
 
 end
@@ -368,27 +350,16 @@ end
 function model.on_selected_entity_changed(event)
 
     local player = game.get_player(event.player_index)
-    local new_entity = player.selected
-
-    if player == nil then
+    if not player then
         return
     end
 
     model.clear_rendering(player)
 
-    if new_entity == nil then
-        return
+    local selected = player.selected
+    if selected and model.stabilizers[selected.name] then
+        model.stabilizer_selected(player, selected)
     end
-
-    if model.stabilizers[new_entity.name] then
-        model.stabilizer_selected(player, new_entity)
-    end
-
-    --[[
-    if model.matter_machines[new_entity.name] then
-        model.matter_machine_selected(player, new_entity)
-    end
-    ]]
 
 end
 
@@ -396,57 +367,45 @@ end
 function model.on_player_cursor_stack_changed(event)
 
     local player = game.get_player(event.player_index)
-
-    if player == nil then
+    if not player then
         return
     end
 
     model.clear_rendering(player)
 
-    if player.cursor_stack and player.cursor_stack.valid_for_read then
-        
-        local item = player.cursor_stack.name
-
-        if model.stabilizers[item] then
+    local cursor = player.cursor_stack
+    if cursor and cursor.valid_for_read then
+        if model.stabilizers[cursor.name] or model.matter_machines[cursor.name] then
             model.stabilizer_on_cursor(player)
         end
-
-        if model.matter_machines[item] then
-            model.stabilizer_on_cursor(player)
-        end
-
     end
 
 end
 
 
+---Round-robin: checks one matter machine per call.
+---@return boolean did_work
 function model.update()
 
-    if not storage.ei.matter_machines then
-        return
+    local machines = storage.ei.matter_machines
+    if not machines then
+        return false
     end
 
-    -- if no current break point then try to make a new one
-    if not storage.ei.stabilizer_break_point and next(storage.ei.matter_machines) then
-        storage.ei.stabilizer_break_point,_ = next(storage.ei.matter_machines)
+    local key = util.next_key(machines, storage.ei.stabilizer_break_point)
+    storage.ei.stabilizer_break_point = key
+    if key == nil then
+        return false
     end
 
-    -- if no current break point then return
-    if not storage.ei.stabilizer_break_point then
-        return
-    end
-
-    -- get current break point
-    local break_id = storage.ei.stabilizer_break_point
-
-    model.update_matter_machine(storage.ei.matter_machines[break_id])
-
-    -- get next break point
-    if next(storage.ei.matter_machines, break_id) then
-        storage.ei.stabilizer_break_point,_ = next(storage.ei.matter_machines, break_id)
+    local machine = machines[key]
+    if machine and machine.valid then
+        model.update_matter_machine(machine)
     else
-        storage.ei.stabilizer_break_point = nil
+        machines[key] = nil
     end
+
+    return true
 
 end
 

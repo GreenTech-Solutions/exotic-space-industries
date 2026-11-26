@@ -6,7 +6,7 @@ remote.add_interface("exotic-industries-milestones", {
     milestones_presets = function()
     return {
         ["Exotic Industries"] = {
-            required_mods = {"exotic-space-industries"},
+            required_mods = {"exotic-space-industries-razi"},
             milestones = {
                 {type="group",      name="Science"},
                 {type="item",       name="ei-dark-age-tech", quantity=1},

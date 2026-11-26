@@ -10,17 +10,15 @@ local model = {}
 
 function model.make_mod_button(player)
 
-  em_trains.check_global()
-
     -- if button already exists, return
-    if mod_gui.get_button_flow(player)["ei_emt_button"] then
+    if mod_gui.get_button_flow(player)["ei-emt_button"] then
         return
     end
 
-    local button = mod_gui.get_button_flow(player).add{
+    mod_gui.get_button_flow(player).add{
         type = "sprite-button",
-        name = "ei_emt_button",
-        sprite = "ei_emt-logo",
+        name = "ei-emt_button",
+        sprite = "ei-emt-logo",
         style = mod_gui.button_style,
         tags = {
             action = "open_mod_gui",
@@ -32,8 +30,8 @@ end
 
 
 function model.open_mod_gui(player)
-    if player.gui.left["ei_mod-gui"] then
-        player.gui.left["ei_mod-gui"].destroy()
+    if player.gui.left["ei-mod-gui"] then
+        player.gui.left["ei-mod-gui"].destroy()
         return
     end
 
@@ -41,7 +39,7 @@ function model.open_mod_gui(player)
 
     local root = left_gui.add{
         type = "frame",
-        name = "ei_mod-gui",
+        name = "ei-mod-gui",
         direction = "vertical"
     }
 
@@ -55,7 +53,7 @@ function model.open_mod_gui(player)
     do -- Chargers
         main_container.add{
             type = "frame",
-            style = "ei_subheader_frame",
+            style = "ei-subheader-frame",
         }.add{
             type = "label",
             caption = {"exotic-industries-emt.mod-gui-chargers-title"},
@@ -66,7 +64,7 @@ function model.open_mod_gui(player)
             type = "flow",
             name = "chargers-flow",
             direction = "vertical",
-            style = "ei_inner_content_flow",
+            style = "ei-inner-content-flow",
         }
 
         -- toggle buton
@@ -90,10 +88,10 @@ function model.open_mod_gui(player)
         toggle_button_frame.add{
             type = "sprite-button",
             name = "toggle-button",
-            sprite = "ei_emt-range-toggle",
+            sprite = "ei-emt-range-toggle",
             tags = {
                 action = "toggle_range_highlight",
-                parent_gui = "ei_mod-gui"
+                parent_gui = "ei-mod-gui"
             }
         }
 
@@ -102,7 +100,7 @@ function model.open_mod_gui(player)
     do -- Trains
         main_container.add{
             type = "frame",
-            style = "ei_subheader_frame",
+            style = "ei-subheader-frame",
         }.add{
             type = "label",
             caption = {"exotic-industries-emt.mod-gui-trains-title"},
@@ -113,7 +111,7 @@ function model.open_mod_gui(player)
             type = "flow",
             name = "trains-flow",
             direction = "vertical",
-            style = "ei_inner_content_flow",
+            style = "ei-inner-content-flow",
         }
 
         -- stats
@@ -143,7 +141,7 @@ function model.open_mod_gui(player)
     do -- Stats
         main_container.add{
             type = "frame",
-            style = "ei_subheader_frame",
+            style = "ei-subheader-frame",
         }.add{
             type = "label",
             caption = {"exotic-industries-emt.mod-gui-stats-title"},
@@ -154,7 +152,7 @@ function model.open_mod_gui(player)
             type = "flow",
             name = "stats-flow",
             direction = "vertical",
-            style = "ei_inner_content_flow",
+            style = "ei-inner-content-flow",
         }
 
         -- stats
@@ -200,12 +198,11 @@ end
 
 function model.update_mod_gui(player)
 
-    if not player.gui.left["ei_mod-gui"] then return end
+    if not player.gui.left["ei-mod-gui"] then return end
 
     local data = model.get_data(player.surface)
 
-    local root = player.gui.left["ei_mod-gui"]
-    local chargers_flow = root["main-container"]["chargers-flow"]
+    local root = player.gui.left["ei-mod-gui"]
     local trains_flow = root["main-container"]["trains-flow"]
     local stats_flow = root["main-container"]["stats-flow"]
 
@@ -226,8 +223,9 @@ end
 
 function model.get_data(surface)
 
+    em_trains.check_global()
     surface = surface or game.get_surface(1)
-    data = {}
+    local data = {}
     
     -- charger info
     local surface_chargers = {}
@@ -249,10 +247,10 @@ function model.get_data(surface)
 
     data.rails = 0
     for _, charger in ipairs(surface_chargers) do
-        data.rails = data.rails + charger.rail_count
+        data.rails = data.rails + (charger.rail_count or 0)
     end
 
-    data.charger_efficiency = storage.ei_emt.buffs.charger_efficiency
+    data.charger_efficiency = string.format("%d%%", math.floor(storage.ei_emt.buffs.charger_efficiency * 100 + 0.5))
     data.acc_level = storage.ei_emt.buffs.acc_level
     data.speed_level = storage.ei_emt.buffs.speed_level
 
@@ -271,7 +269,7 @@ end
 
 function model.updater()
 
-    if not storage.ei_emt.gui.dirty then
+    if not (storage.ei_emt and storage.ei_emt.gui and storage.ei_emt.gui.dirty) then
         return
     end
 
@@ -287,39 +285,24 @@ end
 
 function model.mark_dirty()
 
-  em_trains.check_global()
-
+    em_trains.check_global()
     storage.ei_emt.gui.dirty = true
 
 end
 
 
 function model.on_gui_click(event)
-    
-    --[[
-    if event.element.tags.action == "goto-informatron" then
-        if game.forces["player"].technologies["ei_gate"].enabled == true then
-            remote.call("informatron", "informatron_open_to_page", {
-                player_index = event.player_index,
-                interface = "exotic-industries-informatron",
-                page_name = event.element.tags.page
-            })
-            return
-        end
-    end
-    ]]
 
-    if event.element.tags.action == "open_mod_gui" then
-        model.open_mod_gui(game.get_player(event.player_index))
-        return
+    local player = game.get_player(event.player_index)
+    local action = event.element.tags.action
+
+    if action == "open_mod_gui" then
+        model.open_mod_gui(player)
+    elseif action == "toggle_range_highlight" then
+        em_trains.toggle_range_highlight(player)
     end
 
-    if event.element.tags.action == "toggle_range_highlight" then
-      em_trains.toggle_range_highlight(game.get_player(event.player_index))
-        return
-    end
 end
 
 
 return model
-

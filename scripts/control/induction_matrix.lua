@@ -1,3 +1,5 @@
+local util = require("scripts/control/util")
+
 local model = {}
 
 --====================================================================================================
@@ -174,15 +176,12 @@ function model.check_connected_tiles(pos, surface, render, matrix_id, force)
 
     local max_connected_tiles = model.get_max_connected_tiles(force)
     local tile = surface.get_tile({x=pos.x - 0.25, y=pos.y - 0.25})
-    local pos = tile.position
 
-    if not tile then
+    if not tile or not tile.valid or tile.name ~= "ei-induction-matrix-tile" then
         return false
     end
 
-    if tile.name ~= "ei-induction-matrix-tile" then
-        return false
-    end
+    pos = tile.position
 
     local tile_queue = {}
     local known_tiles = {}
@@ -334,17 +333,19 @@ function model.lookup_tile_for_entity(pos, surface, matrix_id)
             if core_count > 1 then
 
                 -- get old core (the one that isnt the matrix id)
-                local old_core = nil
+                local old_core_unit = nil
 
-                for unit, entity in pairs(storage.ei.induction_matrix.core[matrix_id].core) do
-                    if entity.unit_number ~= matrix_id then
-                        old_core = entity
+                for core_unit, _ in pairs(storage.ei.induction_matrix.core[matrix_id].core) do
+                    if core_unit ~= matrix_id then
+                        old_core_unit = core_unit
                     end
                 end
 
                 -- remove old core table and entry
-                storage.ei.induction_matrix.core[old_core.unit_number] = nil
-                storage.ei.induction_matrix.core[matrix_id].core[old_core.unit_number] = nil
+                if old_core_unit then
+                    storage.ei.induction_matrix.core[old_core_unit] = nil
+                    storage.ei.induction_matrix.core[matrix_id].core[old_core_unit] = nil
+                end
 
                 rendering.draw_text{
                     target = entity,
@@ -441,15 +442,21 @@ function model.swap_core(old_id, core, max_IO)
     -- set the new core as core entity
     -- return the new core id
 
-    local new_core = core.surface.create_entity{
+    local surface = core.surface
+    local position = core.position
+    local force = core.force
+    local quality = core.quality
+
+    core.destroy({raise_destroy=false})
+
+    local new_core = surface.create_entity{
         name = "ei-induction-matrix-core-"..math.floor(max_IO),
-        position = core.position,
-        force = core.force,
+        position = position,
+        force = force,
+        quality = quality,
         create_build_effect_smoke = false,
         raise_built = false,
     }
-
-    core.destroy({raise_destroy=false})
 
     storage.ei.induction_matrix.core[old_id].core = {}
     storage.ei.induction_matrix.core[old_id].core[new_core.unit_number] = new_core
@@ -847,7 +854,6 @@ function model.update_core(matrix_id)
         return
     end
 
-    local tiles = dict["tiles"]
     local state = dict["state"]
     local matrix_id = dict["matrix_id"]
 
@@ -867,24 +873,23 @@ end
 
 function model.update_dirty()
 
-    -- loop over all cores and update those which are marked as dirty
-    model.check_global_init()
-
-    if not storage.ei.induction_matrix.core then
-        return
-    end
-
-    for matrix_id,_ in pairs(storage.ei.induction_matrix.core) do
-
-        if storage.ei.induction_matrix.core[matrix_id].dirty then
-
-            model.update_core(matrix_id)
-
+    -- collect dirty cores first: updating a core can add/replace entries of the table
+    local dirty = {}
+    for matrix_id, matrix in pairs(storage.ei.induction_matrix.core) do
+        if matrix.dirty then
+            table.insert(dirty, matrix_id)
         end
-
     end
 
-    model.remove_old_cores()
+    for _, matrix_id in ipairs(dirty) do
+        if storage.ei.induction_matrix.core[matrix_id] then
+            model.update_core(matrix_id)
+        end
+    end
+
+    if #dirty > 0 then
+        model.remove_old_cores()
+    end
 
 end
 
@@ -933,28 +938,24 @@ end
 
 function model.update_render_queue(tick)
 
-    model.check_global_init()
-
-    if next(storage.ei.induction_matrix.render_queue) == nil then
+    local queue = storage.ei.induction_matrix.render_queue
+    if #queue == 0 then
         return
     end
 
-    for i, v in ipairs(storage.ei.induction_matrix.render_queue) do
+    -- iterate backwards so table.remove does not skip entries
+    for i = #queue, 1, -1 do
+        local v = queue[i]
 
         if v.tick <= tick then
-
             if v.rtype == "tile-box" then
                 model.render_tile_box(v)
-            end
-
-            if v.rtype == "stat-text" then
+            elseif v.rtype == "stat-text" then
                 model.remove_stat_text(v)
             end
 
-            table.remove(storage.ei.induction_matrix.render_queue, i)
-
+            table.remove(queue, i)
         end
-
     end
 
 end
@@ -965,6 +966,10 @@ function model.render_tile_box(data)
     local surface = data.surface
     local pos = data.position
     local color = data.color
+
+    if not util.is_valid(surface) then
+        return
+    end
 
     local box = {
         left_top = {pos.x, pos.y},
@@ -1008,13 +1013,8 @@ function model.show_stats(surface, pos, stats)
 
     end
 
-    if capacity_text then
-        capacity_text.destroy()
-    end
-
-    if IO_text then
-        IO_text.destroy()
-    end
+    util.destroy_render(capacity_text)
+    util.destroy_render(IO_text)
 
     capacity_text = rendering.draw_text{
         text = "Capacity: " .. math.floor(stats.capacity) .. "MJ",
@@ -1058,8 +1058,8 @@ end
 
 function model.remove_stat_text(data)
 
-    data.capacity_text.destroy()
-    data.IO_text.destroy()
+    util.destroy_render(data.capacity_text)
+    util.destroy_render(data.IO_text)
 
 end
 
@@ -1075,7 +1075,7 @@ function model.get_matrix_capacity(matrix_id)
     end
 
     -- in MJ
-    return storage.ei.induction_matrix.core[matrix_id].stats.capacity
+    return storage.ei.induction_matrix.core[matrix_id].stats.capacity or 0
 
 end
 
@@ -1089,7 +1089,11 @@ function model.get_matrix_max_IO(matrix_id)
     end
 
     -- in MW
-    return 2^storage.ei.induction_matrix.core[matrix_id].stats.max_IO
+    local max_IO = storage.ei.induction_matrix.core[matrix_id].stats.max_IO
+    if not max_IO then
+        return 0
+    end
+    return 2^max_IO
 
 end
 
@@ -1103,8 +1107,8 @@ function model.get_matrix_current_stored_power(matrix_id)
 
     local core = model.get_core_entity(matrix_id)
 
-    if core == nil then
-        return
+    if core == nil or not core.valid then
+        return 0
     end
 
     -- in MJ
@@ -1123,7 +1127,7 @@ function model.force_visual_update(matrix_id)
 
     local core = model.get_core_entity(matrix_id)
 
-    if core == nil then
+    if core == nil or not core.valid then
         return
     end
 
@@ -1142,14 +1146,19 @@ end
 
 function model.get_core_entity(matrix_id)
 
+    local matrix = matrix_id and storage.ei.induction_matrix.core[matrix_id]
+    if not matrix or not matrix.core then
+        return nil
+    end
+
     local core = nil
 
-    for _, entity in pairs(storage.ei.induction_matrix.core[matrix_id].core) do
+    for _, entity in pairs(matrix.core) do
 
         if core == nil then
             core = entity
         else
-            game.print("ERROR: multiple cores found for matrix_id: " .. matrix_id)
+            log("Exotic Space Industries: multiple cores found for induction matrix " .. matrix_id)
             return nil
         end
 
@@ -1177,24 +1186,17 @@ function model.on_built_entity(entity)
         return
     end
 
+    local dict = nil
+
     if entity.name == "ei-induction-matrix-core-0" then
-
-        local dict = model.check_connected_tiles(entity.position, entity.surface, true, entity.unit_number, entity.force)
-
-        model.set_core_state(dict.matrix_id, dict.state)
-
-        model.mark_dirty(dict.matrix_id)
-
+        dict = model.check_connected_tiles(entity.position, entity.surface, true, entity.unit_number, entity.force)
+    elseif model.but_cores[entity.name] then
+        dict = model.check_connected_tiles(entity.position, entity.surface, false, nil, entity.force)
     end
 
-    if model.but_cores[entity.name] then
-
-        local dict = model.check_connected_tiles(entity.position, entity.surface, false, nil, entity.force)
-
+    if dict then
         model.set_core_state(dict.matrix_id, dict.state)
-
         model.mark_dirty(dict.matrix_id)
-
     end
 
 end
@@ -1227,9 +1229,10 @@ function model.on_destroyed_entity(entity)
 
         local dict = model.check_connected_tiles(entity.position, entity.surface, false, nil, entity.force)
 
-        model.set_core_state(dict.matrix_id, dict.state)
-
-        model.mark_dirty(dict.matrix_id)
+        if dict then
+            model.set_core_state(dict.matrix_id, dict.state)
+            model.mark_dirty(dict.matrix_id)
+        end
 
     end
 
@@ -1238,10 +1241,15 @@ end
 
 function model.on_built_tile(event)
 
-    local surface = game.surfaces[event.surface_index]
+    local surface = game.get_surface(event.surface_index)
     local tiles = event.tiles
     local tile = event.tile
-    local source = event.robot or game.get_player(event.player_index)
+    local source = event.robot or (event.player_index and game.get_player(event.player_index))
+    local force = source and source.force
+
+    if not surface then
+        return
+    end
 
     --if tile.name ~= "ei-induction-matrix-tile" then
     --    return
@@ -1267,7 +1275,7 @@ function model.on_built_tile(event)
 
         pos = {x = pos.x + 0.25, y = pos.y + 0.25}
 
-        local dict = model.check_connected_tiles(pos, surface, false, nil, source.force)
+        local dict = model.check_connected_tiles(pos, surface, false, nil, force)
 
         if dict == false then
             goto continue
@@ -1286,9 +1294,17 @@ end
 
 function model.on_destroyed_tile(event)
 
-    local surface = game.surfaces[event.surface_index]
+    local surface = game.get_surface(event.surface_index)
     local tiles = event.tiles
-    local source = event.robot or game.get_player(event.player_index)
+    local source = event.robot or (event.player_index and game.get_player(event.player_index))
+    local force = source and source.force
+
+    if not surface then
+        return
+    end
+
+    model.check_global_init()
+    storage.ei.induction_matrix.to_remove = storage.ei.induction_matrix.to_remove or {}
 
     for _, v in ipairs(tiles) do
 
@@ -1416,7 +1432,7 @@ function model.on_destroyed_tile(event)
             if y.name == "ei-induction-matrix-tile" then
 
                 local shifted_pos = {x = y.position.x + 0.25, y = y.position.y + 0.25}
-                local dict = model.check_connected_tiles(shifted_pos, surface, false, nil, source.force)
+                local dict = model.check_connected_tiles(shifted_pos, surface, false, nil, force)
 
                 if dict == false then
                     goto contin
@@ -1438,10 +1454,12 @@ function model.on_destroyed_tile(event)
 end
 
 
+---Runs every tick.
 function model.update()
 
     local tick = game.tick
 
+    model.check_global_init()
     model.update_render_queue(tick)
     model.update_dirty()
     if tick % 15 == 0 then
@@ -1491,7 +1509,7 @@ function model.open_gui(player)
         }
         titlebar.add{
             type = "empty-widget",
-            style = "ei_titlebar_draggable_spacer",
+            style = "ei-titlebar-draggable-spacer",
             ignored_by_interaction = true
         }
         titlebar.add{
@@ -1527,7 +1545,7 @@ function model.open_gui(player)
 
     main_container.add{ -- Console subheader
         type = "frame",
-        style = "ei_subheader_frame"
+        style = "ei-subheader-frame"
     }.add{
         type = "label",
         caption = {"exotic-industries.induction-matrix-gui-console-title"},
@@ -1538,13 +1556,13 @@ function model.open_gui(player)
         type = "flow",
         name = "console-flow",
         direction = "vertical",
-        style = "ei_inner_content_flow"
+        style = "ei-inner-content-flow"
     } --[[@as LuaGuiElement]]
 
     local camera_frame = console_flow.add{
         type = "frame",
         name = "camera-frame",
-        style = "ei_camera_frame"
+        style = "ei-camera-frame"
     } --[[@as LuaGuiElement]]
 
     camera_frame.add{
@@ -1552,7 +1570,7 @@ function model.open_gui(player)
         name = "camera",
         position = entity.position,
         surface_index = entity.surface.index,
-        style = "ei_camera"
+        style = "ei-camera"
     }
 
 
@@ -1563,7 +1581,7 @@ function model.open_gui(player)
         caption = {"exotic-industries.induction-matrix-gui-max-energy-transfer"},
         tooltip = {"exotic-industries.induction-matrix-gui-max-energy-transfer-tooltip"}
     }
-    max_et.add{type = "empty-widget", style = "ei_horizontal_pusher"}
+    max_et.add{type = "empty-widget", style = "ei-horizontal-pusher"}
     max_et.add{
         type = "label",
         name = "max-et-value"
@@ -1578,14 +1596,14 @@ function model.open_gui(player)
     local power_bar = capacity.add{
         type = "progressbar",
         name = "stored-power-value",
-        style = "ei_status_progressbar",
+        style = "ei-status-progressbar",
         tooltip = {"exotic-industries.induction-matrix-gui-capacity-tooltip"}
     }
     power_bar.style.horizontal_align = "right"
 
     console_flow.add{
         type = "empty-widget",
-        style = "ei_vertical_pusher"
+        style = "ei-vertical-pusher"
     }
 
     local button_flow = console_flow.add{type = "flow"} --[[@as LuaGuiElement]]
@@ -1610,15 +1628,15 @@ end
 
 function model.update_player_guis()
 
-    for _, player in pairs(game.players) do
-        if player.gui.screen["ei-induction-matrix-console"] then
-            if not player.opened then
+    for _, player in pairs(game.connected_players) do
+        local root = player.gui.screen["ei-induction-matrix-console"]
+        if root then
+            -- the console is a screen GUI set as player.opened; if something else got opened it is stale
+            if player.opened ~= root then
                 model.close_gui(player)
-                return
+            else
+                model.update_gui(player)
             end
-
-            local unit = player.opened.unit_number
-            model.update_gui(player)
         end
     end
 
@@ -1663,12 +1681,6 @@ function model.on_gui_click(event)
 
     if action == "close-gui" then
         model.close_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif action == "goto-informatron" then
-        remote.call("informatron", "informatron_open_to_page", {
-            player_index = event.player_index,
-            interface = "exotic-industries-informatron",
-            page_name = event.element.tags.page,
-          })
     elseif action == "reanalyze-matrix" then
         local player = game.get_player(event.player_index) --[[@as LuaPlayer]]
         local root = player.gui.screen["ei-induction-matrix-console"] --[[@as LuaGuiElement]]

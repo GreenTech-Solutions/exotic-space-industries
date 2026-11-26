@@ -22,7 +22,7 @@ data:extend({
     {
         name = "ei-steam-crusher",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 1,
         ingredients =
         {
@@ -46,10 +46,6 @@ data:extend({
             {
                 type = "unlock-recipe",
                 recipe = "ei-steam-crusher"
-            },
-            {
-                type = "unlock-recipe",
-                recipe = "ei-crushed-iron-plate"
             },
             {
                 type = "unlock-recipe",

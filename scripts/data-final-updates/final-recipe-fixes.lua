@@ -129,7 +129,7 @@ end
 
 for i,v in pairs(crafting_categories) do
     for i2,v2 in pairs(data.raw["recipe"]) do
-        if v2.category == v then
+        if ei_lib.table_contains_value(v2.categories or {}, v) then
             v2.allow_productivity = true
         end
     end
@@ -149,6 +149,8 @@ for name,recipe in pairs(data.raw.recipe) do
     ei_lib.recipe_swap(name, "steel-beam", "steel-plate")
 end
 
+ei_lib.recipe_swap("fission-reactor-equipment", "uranium-fuel-cell", "ei-uranium-235-fuel")
+
 ei_lib.recipe_swap("concrete", "ei-copper-mechanical-parts", "iron-stick")
 ei_lib.recipe_swap("refined-concrete", "ei-copper-mechanical-parts", "iron-stick")
 
@@ -159,7 +161,7 @@ ei_lib.add_unlock_recipe("ei-morphium-usage","ei-concentrated-morphium-lubricant
 
 ei_lib.enable_from_start("iron-stick")
 ei_lib.enable_from_start("iron-gear-wheel")
-ei_lib.enable_from_start("blank-tech-card")
+ei_lib.enable_from_start("kr-blank-tech-card")
 
 --ei_lib.add_unlock_recipe("inhibitor-lamp","inhibitor-lamp") --?
 ei_lib.add_unlock_recipe("uranium-mining","centrifuge")
@@ -199,6 +201,7 @@ if mods and mods["aai-signal-transmission"] then
     ei_lib.remove_unlock_recipe("space-platform","aai-signal-sender")
 end
 ei_lib.add_unlock_recipe("electronics","stone-tablet")
+ei_lib.add_unlock_recipe("electronics","stone-tablet")
 ei_lib.add_unlock_recipe("ei-steam-power","boiler")
 ei_lib.add_unlock_recipe("ei-electricity-power","steam-engine")
 ei_lib.add_unlock_recipe("ei-glass","glass")
@@ -226,9 +229,9 @@ if data.raw.technology["uranium-mining"] and data.raw.recipe["centrifuge"] then
   data.raw.lab.lab.surface_conditions = nil
 end
 
-data.raw.recipe["transport-belt"].category = "crafting"
-data.raw.recipe["underground-belt"].category = "crafting"
-data.raw.recipe["splitter"].category = "crafting"
+data.raw.recipe["transport-belt"].categories = {"crafting"}
+data.raw.recipe["underground-belt"].categories = {"crafting"}
+data.raw.recipe["splitter"].categories = {"crafting"}
 
 -- error(serpent.block(data.raw.technology["uranium-mining"]))
 -- error(serpent.block(data.raw.recipe["centrifuge"]))
@@ -244,12 +247,49 @@ local function overwrite_barrel_capacity(recipeItem, capacity)
   end
 end
 
+--- Marks each item product in one recipe variant as always fresh.
+--- Converts legacy single-result fields to an explicit item-product object when needed.
+---@param recipe_variant table|nil RecipePrototype or its normal/expensive variant.
+---@return nil No value is returned; the supplied variant is modified in place.
+local function mark_item_products_always_fresh(recipe_variant)
+  -- Missing normal/expensive variants have nothing to modify.
+  if not recipe_variant then
+    return
+  end
+
+  -- Preserve multi-result recipes and mark only item products as always fresh.
+  if recipe_variant.results then
+    -- Keep the existing legacy tuple compatibility while attaching the Factorio 2.1 field.
+    for _, product in pairs(recipe_variant.results) do
+      -- A missing type indicates legacy item-result shorthand; fluids do not support always_fresh.
+      if product.type == nil or product.type == "item" then
+        product.always_fresh = true
+      end
+    end
+  -- Convert the old singleton result form so it can carry ItemProductPrototype.always_fresh.
+  elseif recipe_variant.result then
+    recipe_variant.results = {{
+      type = "item",
+      name = recipe_variant.result,
+      amount = recipe_variant.result_count or 1,
+      always_fresh = true,
+    }}
+    recipe_variant.result = nil
+    recipe_variant.result_count = nil
+  end
+end
+
+
+
 for _, recipe in pairs(data.raw.recipe) do
 
   recipe.always_show_made_in = false
   recipe.always_show_products = false
   recipe.hide_from_signal_gui = false
-  recipe.result_is_always_fresh = true
+  recipe.result_is_always_fresh = nil
+  mark_item_products_always_fresh(recipe)
+  mark_item_products_always_fresh(recipe.normal)
+  mark_item_products_always_fresh(recipe.expensive)
   recipe.unlock_results = true
 
   if ei_lib.contains(recipe.name,"recycler") then recipe.surface_conditions = nil end
@@ -651,7 +691,7 @@ data:extend({
   {
     name = "ei-gear-to-plates",
     type = "recipe",
-    category = "crafting",
+    categories = {"crafting"},
     energy_required = 1,
     ingredients = {
         {type="item", name="iron-gear-wheel", amount = 2},
@@ -665,7 +705,7 @@ data:extend({
 {
     name = "ei-iron-stick-to-iron-parts",
     type = "recipe",
-    category = "crafting",
+    categories = {"crafting"},
     energy_required = 0.5,
     ingredients = {
         {type="item", name="iron-stick", amount = 2},
@@ -679,7 +719,7 @@ data:extend({
 {
     name = "ei-cable-to-plates",
     type = "recipe",
-    category = "crafting",
+    categories = {"crafting"},
     energy_required = 0.5,
     ingredients = {
         {type="item", name="copper-cable", amount = 2},
@@ -687,13 +727,13 @@ data:extend({
     results = {
         {type = "item", name = "copper-plate", amount = 1},
     },
-    enabled = true,
+    enabled = false,
     main_product = "copper-plate",
 },
 {
     name = "ei-cable-to-copper-parts",
     type = "recipe",
-    category = "crafting",
+    categories = {"crafting"},
     energy_required = 0.5,
     ingredients = {
         {type="item", name="copper-cable", amount = 2},
@@ -701,14 +741,14 @@ data:extend({
     results = {
         {type = "item", name = "ei-copper-mechanical-parts", amount = 1},
     },
-    enabled = true,
+    enabled = false,
     main_product = "ei-copper-mechanical-parts",
 },
 
 {
   name = "ei-space-data",
   type = "recipe",
-  category = "crafting",
+  categories = {"crafting"},
   energy_required = 10,
   ingredients = {
       {type = "item", name = "ei-space-data", amount = 1},
@@ -724,3 +764,6 @@ data:extend({
 })
 
 ei_lib.add_unlock_recipe("space-science-pack","ei-space-data")
+
+ei_lib.add_unlock_recipe("electronics","ei-cable-to-plates")
+ei_lib.add_unlock_recipe("electronics","ei-cable-to-copper-parts")

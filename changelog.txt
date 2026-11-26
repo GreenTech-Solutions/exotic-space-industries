@@ -1,10 +1,293 @@
 ---------------------------------------------------------------------------------------------------
+Version: 3.2.1
+Date: 01-11-26
+  Bugfixes:
+    - Fixed reworked drone port crash, reactivated it
+---------------------------------------------------------------------------------------------------
+Version: 3.2.0
+Date: 30-09-26
+  Major Features:
+    - Alien tech tree rework. Every technology of the tree is now script-only (no lab research),
+      visible in the technology screen and depends on the lab technology "Resonance synthesizer"
+      (the bio chamber keeps its own prerequisites: the alien science pack needs it). A node can
+      only be bought when the prerequisites of its technology are researched.
+    - Tree layout: tier 1 gets the conduit, tier 4 adds the data center and the crystal radio station, tier 5 the void engine
+      (same costs as the other nodes of their tier).
+    - Alien knowledge payment: missing knowledge is paid from the inventory in the priority
+      knowledge -> alien resonance packs (10 knowledge each, surplus is refunded) -> resonance data
+      (10 per knowledge). The confirm dialog shows exactly what is consumed.
+    - Salvaging broken ruins: mining, deconstructing or destroying an unrepaired alien artifact on
+      Gaia grants 10 % of the repair reward. Salvaged ruins no longer return themselves but a small
+      random amount of high tier resources (high energy crystals, magnets, alien resin, ...).
+      No more knowledge is granted once the whole tree is unlocked.
+    - Unrepaired ruins are immune to lightning.
+    - Ancient conduit (ei-conduit-gaia): a non-craftable, indestructible lightning rod that replaces
+      the fulgoran ruin attractors on Gaia. Until the conduit is unlocked players have to build next to them.
+    - Radio station (electricity age, 100 kW): wireless circuit network channels on one surface.
+      Any signal is a channel, one transmitter and any number of receivers per channel.
+    - Crystal radio station (alien tier 4, 10 MW): the same for every surface of the game.
+    - Drone port and drones (alien tier 2, 300 knowledge): script drones for exactly one job each,
+      controlled from the drone port GUI and targeted with the drone remote. Tasks: salvage one
+      neutral structure (result into the port), mine a resource patch like a player into a
+      container, transfer exactly one item between two containers or gates, guard a zone (up to
+      21x21) with repair packs from the port by priority (class order, then lowest health). Drones
+      carry 50 items, fly 0.3 tiles/tick, work up to 64 tiles from their port on every surface, are
+      invulnerable and need a powered port (1 MJ per departure). The port has filtered
+      slots.
+    - Gaia boulders: six minable boulder families (violet, rust-red, slate, basalt, ice, sandstone)
+      with thematic mining results. They are scattered alone on Gaia and replace the vanilla rocks of
+      ruins (POI) spawned on Gaia. Existing Gaia surfaces get them in newly generated chunks.
+    - Gate calibration with planet samples: the first gate exit a force sets on a planet consumes a
+      rock sample of that planet (from the player inventory, else from the gate). Samples are
+      crushed from local raw materials and can only be made on their planet (Vulcanus, Gleba,
+      Fulgora, Aquilo, Gaia; unlocked with the gate). Nauvis needs no sample, space platforms need
+      none but are only reachable while they orbit Gaia. Modded planets are no gate exits until a
+      compatibility patch defines their sample. Exits of existing gates are grandfathered.
+    - Alien terminal (alien tier 1): the access point of the alien tech tree. Nodes can only be
+      bought within 16 tiles of a terminal of the own force on Gaia (the terminal node itself can be
+      bought anywhere). Resonance packs and resonance data put into a terminal are converted into
+      alien knowledge at the payment rates. Broken terminals are a Gaia ruin (POI) with their
+      own repair kit (unlocked with Gaia); a repaired terminal belongs to the repairing force and
+      grants 200 knowledge once. The terminal GUI opens the tree. Forces that already used the tree
+      get the terminal technology.
+    - Holographic gas cloud (unlocked with the space platform).
+  Changes:
+    - Resonance synthesizer recipe multiplies data: 1 resonance data + 100 morphium + 50 computing
+      power -> 2 resonance data.
+    - Data center recipes always produce 1 pack and cost 1 computing power per unique component of
+      the pack's recursive production chain (loop-safe, 100 as fallback for too large chains).
+    - The "Vent dirty water" recipe is unlocked by the purifier technology.
+    - The gate technology description no longer promises travel (the gate only moves items).
+    - Alien tech tree page: every tier is drawn on a space background (deep space for tiers 4-5).
+  Removed:
+    - Age progression gate ("research N % of the previous age"): hidden dummy technologies, the
+      "counts for age progression" overlay and the InformaTron "age progress" remnants. Ages stay as
+      technology metadata.
+    - Space destinations remnants (InformaTron page, styles, black hole data item, rocket silo GUI
+      texts, satellites and planet rocks locale).
+    - Orphaned locale entries of prototypes that no longer exist.
+    - Unused pipe cover table ei_pipe_basic and the never loaded Factorio 1.1 file
+      stone_well_pump.lua.
+  Bugfixes:
+    - InformaTron "cranes and belts" page referenced the non-existing item ei-big-inserter.
+    - Metalworks level overlays and a few item descriptions referenced wrong names.
+    - Basic heat pipe showed only the last sprite variant of every direction (the new file name was
+      written onto the variant list instead of each variant).
+    - Advanced and superior electric mining drills edited the vanilla remnants and dying explosion:
+      the superior drill overwrote the advanced one (and the vanilla drill looked like a kirazy
+      drill when destroyed). Each drill has its own remnants and explosion now.
+    - Advanced roboport engine animation path contained a double slash.
+    - Technology age detection overflowed the stack when mods created a prerequisite cycle; the
+      cycle is now cut and logged once as a readable chain (based on a hyper.temp@Discord patch).
+  Locale:
+    - Short flavor descriptions for every entity, item, fluid, recipe, technology, tile and the
+      planet that had none (English and Russian).
+---------------------------------------------------------------------------------------------------
+Version: 3.1.0
+Date: 29-09-26
+  Major Features:
+    - Alien tech tree reactivated (InformaTron page "Alien tech tree", 5 tiers). Repairing an alien
+      artifact grants "alien knowledge" points that unlock technologies instead of
+      researching them in a lab. Tiers 1-3 restore original (known as EI knowledge system) nodes, tier 4 and tier 5 are new and also consume resonance data /
+      alien resonance packs from the inventory.
+    - Resonance data: every repaired artifact spills 2-4 pieces. The new resonance synthesizer
+      (alien tier 1) synthesizes it from morphium and computing power.
+    - Alien resonance pack: second alien science tier, crafted in the resonance synthesizer and only
+      on Gaia (recipe surface conditions).
+    - Data center: crafts any science pack of the big lab (vanilla, Space Age, other mods and the
+      alien packs) from computing power only, ~10x slower than regular production. Recipes are
+      generated automatically in data-final-fixes. Graphics: Hurricane046 cybernetics facility.
+    - Conduit: lightning attractor that turns 80 % of every captured strike into electricity
+      (40 MJ buffer, 5 MW output). Unlocked with Gaia. Graphics: Hurricane046 conduit.
+    - Void rift generator (alien tier 5): carves a 5x5 out-of-map rift south of itself for void
+      engines and restores the original terrain and resources when removed.
+    - Gaia storm EMP: lightning strikes on Gaia that miss every lightning attractor disable machines,
+      inserters and combinators around the impact for 5 seconds (map setting "Gaia storm EMP").
+    - Every gate jump goes through Gaia. A gate outside of Gaia can only lead to Gaia,
+      a gate on Gaia to every other surface.
+    - Platform requests scanner (orbital combinator) consumes 1 computing power per minute through
+      a hidden data port while an orbiting platform has requests; without it the signals freeze
+      and a warning icon is shown.
+    - Underground data cable.
+    - Five new hand-made Gaia ruin presets (shrine, grove, outpost, sanctuary, monument).
+  Bugfixes:
+    - Artifact spawner: 5 presets could never spawn (rarity "temp" / "very-rare" typos, duplicate
+      table keys "accu-site_5" and "beacon-site_small-2" overwrote each other).
+    - InformaTron: gate and repair pages were unreachable (dependency on the never-set
+      storage.ei.knowledge), empty "surface patches" headings removed, the "tech" section and the
+      space destinations page restored (text updated for Space Age), "Informatron wiki updated"
+      messages were never sent and used a non-existing sprite.
+    - Missing locale: technology names of modules 4-6, solar panels 2/3 and crystal accumulator,
+      gate remote item name, black hole start button caption.
+    - Void engine and burner quarry used the Factorio 1.x "module_specification" field that 2.0
+      ignores (void engine had no module slots).
+  Changes:
+    - "No triggers" setting no longer converts script-only (alien tree) technologies into lab
+      technologies.
+    - Beacon overload and storm EMP never re-enable a machine the other system still disables.
+  Locale:
+    - New complete Russian translation (locale/ru), English texts for all new content.
+---------------------------------------------------------------------------------------------------
+Version: 3.0.0
+Date: 25-09-26
+  Major Features:
+    - Multiplayer desync fixes. All runtime state now lives in the synchronised storage table:
+      the entity update scheduler used a plain Lua variable (not saved) to pick the updater of the
+      current tick, so a client that joined a game ran different updates than the server.
+      Verified with Factorio heavy mode (original: mismatch every 10 ticks, now: none).
+    - Round-robin updaters (beacons, pipes, neutron collectors, matter stabilizers, orbital
+      combinators, fuelers, gates, EM trains/chargers) no longer call next() with removed keys,
+      which crashed or desynced freshly loaded clients ("invalid key to 'next'").
+  Bugfixes:
+    - Black hole generator: the GUI stopped updating after save/load and the startup state was lost
+      as soon as the mass reached zero. The "startup" state is now stored explicitly, the generator
+      is updated every tick (stage 1 takes the documented 60 seconds, extractors deliver up to
+      100 GW each) and the GUI refreshes reliably. Existing generators are migrated.
+    - Black hole generator: mining a generator that still contained items crashed the game.
+    - Black hole generator: opening an unregistered generator crashed the GUI.
+    - Dedicated servers crashed when no player had joined yet (EM train buffs read game.players[1]).
+    - Typing "/gaia" in chat crashed the game for everyone. It is now an admin-only teleport.
+    - Opening the induction matrix console could crash the game on the periodic GUI update.
+    - Induction matrix: several crashes when cores/tiles were removed or a matrix had no stats yet.
+    - Neutron collectors next to fusion reactors always had 0 % efficiency (wrong recipe name
+      format when reading the reactor fuel mode).
+    - EM chargers: researched efficiency levels made the energy consumption negative (chargers
+      produced energy). Efficiency now follows the research levels 10 % .. 90 %.
+    - EM chargers: partial charges drained the charger completely, the range toggle button of the
+      EM train window did nothing, charger/train queues collected duplicates after every update.
+    - EM train and charger glow settings could not be disabled (wrong setting names).
+    - Gate: remote exit selection is now per player (two players could overwrite each other,
+      using a leftover remote crashed the game), a player leaving during the selection gets his
+      character back on rejoin, items waiting in a removed gate are dropped instead of deleted,
+      messages go to the gate owner's force instead of spamming everyone.
+    - Fueler: settings are stored per entity (unit number) instead of by position, quality and
+      spoilage of fuel/ammo are preserved, turrets are always resupplied, removed fuelers no longer
+      break the update queue. The Warp Drive Machine surface-change workaround was replaced by
+      proper handling of cloned entities.
+    - Matter stabilizer range/connection previews are drawn per player (selecting a stabilizer
+      cleared the previews of all other players).
+    - Beacon overload: vanilla beacons and newly built machines are now checked as well, a beacon
+      that is being removed is not counted anymore, and only machines disabled by the overload are
+      re-enabled.
+    - Crystal accumulator: the Gaia variant (double output) is used on Gaia again (surface name
+      mismatch), and it is swapped back / mined as the regular accumulator outside of Gaia.
+    - Artifact spawner: stale queue entries on deleted surfaces crashed the game, the recording
+      tools used the removed game.write_file API.
+    - Chat messages with emoji were garbled by the colour gradient (UTF-8 aware now).
+    - Several helper functions (recipe_add, recipe_remove, remove_prerequisite, tech ingredient
+      de-duplication) skipped entries or never matched the Factorio 2.0 ingredient format.
+    - Level overlays for vanilla machine icons are shown (they silently failed for icons without
+      an explicit icon_size).
+  Changes:
+    - Data cables use their own pipe connection category: they only connect to data cables and to
+      the data connections of computers, never to regular pipes. Computing power connections of the
+      computer core, small simulator and quantum computer can not be connected to regular pipes, so
+      regular pipes can no longer carry computing power. Regular pipes that still contain computing
+      power explode (this check did not run at all without copper beacons before).
+    - Batteries from scrap recycling stay at the vanilla 4 % (scrap results are also filtered for
+      items removed by other mods).
+    - Removed the duplicate steam crusher recipe for crushed iron ("ei-crushed-iron-plate"), machines
+      using it are migrated to "ei-crushed-iron".
+    - Krastorio 2 Spaced Out: K2 sand is merged into EI sand, every crusher (steam, EI, K2) can use
+      both crushing recipe categories. Leftover K2 sand can be converted by hand.
+    - Krastorio 2 Spaced Out: "Imersium processing" no longer requires the imersite tech pack it
+      unlocks. A general guard removes science packs from technologies that unlock them.
+    - Gaia map generation is built from a fresh copy of the vanilla Fulgora settings and enforced in
+      data-final-fixes, so mods changing Fulgora or injecting tiles into every planet can no longer
+      turn Gaia into an endless grass field.
+    - "/esi-gaia-reborn" is admin only, runs as a state machine (surface deletion is deferred by
+      the engine) and gives up after 5 failed regenerations instead of looping forever.
+    - Remelting loops (plate -> molten metal -> plate, also via mechanical parts) never receive
+      productivity, including productivity research, so foundry/module productivity can no longer
+      create infinite copper, iron, steel, gold or lead.
+    - Removed the rocket silo "cheat mode" hack: opening a rocket silo gave the player cheat mode
+      (free instant crafting) and removed cheat mode from admins that had it enabled.
+    - Loaders only snap to belts/containers when built by hand; loaders from blueprints keep their
+      blueprint orientation.
+    - Debloat setting is applied once more at the very end (age packs assigned late were missed).
+    - Removed the unused "esi-gaia-reborn" custom input and empty script files.
+  Scripting:
+    - Control stage reorganised: one scheduler (tick based), central GUI click dispatch (including
+      all "open Informatron" buttons), shared helpers in scripts/control/util.lua, storage
+      initialisation and migrations in one place, detailed documentation in every module.
+    - Removed accidental global variables in control and data stage scripts.
+---------------------------------------------------------------------------------------------------
+Version: 2.2.0
+Date: 08-01-26
+  Changes:
+    - Scrap-recycling: battery drop rate 2% => 4%
+    - Scrap-recycling: added alien seed drop with 2% chance
+    - Scrap-recycling: recycler result_inventory_size => 20
+    - Removed blue circuit EI recipe, because of SA recycle system recycling them outputs lategame components, while blue circuits still need to build rocketry things on Nauvis.
+    - You can now dump items to Gaia waters.
+    - And it maybe will work with modded water tiles too (any tile that can provide liquid using pump).
+    - Alien Seeds now stackable.
+    - Due to the light refraction of atmospheric crystals, solar panels do not work on the surface of Gaia.
+---------------------------------------------------------------------------------------------------
+Version: 2.1.1
+Date: 03-01-26
+  Changes:
+    - Changed scrap-recycling recipe results (removed iron gears, overall buffed)
+    - Changed fission-reactor-equipment recipe - now require same EI power cell for craft, same what it can consume for fuel ("uranium-fuel-cell" => "ei-uranium-235-fuel")
+---------------------------------------------------------------------------------------------------
+Version: 2.1.0
+Date: 24-12-25
+  Changes:
+    - Steel heat furnace connection fix
+    - Fluorite again can be filtered from "dirty water" what Excavator outputs. Excavator become avaiable very much earlier - in electricity age, so you can start to craft first Fluorite-dependent things on Nauvis.
+  Notes:
+    - Happy Christmas and New Year Eve!
+---------------------------------------------------------------------------------------------------
+Version: 2.0.7
+Date: 30-09-25
+  Changes:
+    - Small fixes in various places.
+    - Fueler made compatible with Warp Drive Machine. Fuelers not working on "planet orbit" surface aka pseudo-spaceflight, if this option enabled in WDM, but start to work again once landed. Vehicle fueling setting will reset, but ammo-turret / artillery-turret refueling works always, so it continue to restock turrets.
+---------------------------------------------------------------------------------------------------
+Version: 2.0.2
+Date: 20-09-25
+  Changes:
+    - Basic compatibility with 'Krastorio 2: Spaced Out' and planets/packs like 'Stellar Horizons'.
+    - Bug fixes
+    - Compatibility fixes
+---------------------------------------------------------------------------------------------------
+Version: 1.9.0
+Date: 16-08-25
+  Changes:
+    - Removed integrated K2 entities, as there are standalone K2 for SA now. Not recomended to update on existing save.
+    - EI tech scaling, when enabled, now rise tech multiplier only when important (leading to vanilla/EI endgame, science-pack, or discovery one) tech researched, side ones (like steel pickaxe, for example) will not trigger cost increase. Work also with number of mods.
+---------------------------------------------------------------------------------------------------
+Version: 1.8.0
+Date: 25-07-25
+  Changes:
+    - New Gaia prototype definition, probably should not krangle anymore.
+    - Console command /esi-gaia-reborn to force destroy and recreate surface to fix old saves or if this happens again, will take some time.
+    - Gaia has perpetual lightning storms - now her morphium comes not so free.
+    - Fixed crash related to gate gui.
+    - Removed fulgorian ruins from Gaia generation. Only scrap and lightning attractors remain.
+    - Ruin lightning attractor coverage sligthly larger.
+    - Lightning damage increased.
+    - Option to make Gaia entities requiring heating, default on, but needs to be off for "/esi-gaia-reborn" to work.
+---------------------------------------------------------------------------------------------------
+Version: 1.7.2
+Date: 13-07-25
+  Changes:
+    - Lignumis: lumber fuel_category no longer overridden to "chemical" and can not be burned as chemical fuel
+---------------------------------------------------------------------------------------------------
+Version: 1.7.0
+Date: 05-07-25
+  Changes:
+    - Removed Gaia reforge
+    - Removed VFX on player spawn
+    - Removed morphium-patch as redundant
+    - Partially implemented Void Engine, unpublished bit of original EI content, though you need out-of-map tile in range for it to work. You can use other mods like Voidfill to provide it. It's original mechanic and limitations does not suits Space Age, but at this moment i can not re-implement it suitable and properly.
+---------------------------------------------------------------------------------------------------
 Version: 1.6.0
 Date: 25-05-25
   Changes:
     - Bugfixes
   Notes:
-    - Contributor 1righteousgod seems step away from modding, Eliont here again 
+    - Contributor 1righteousgod seems step away from modding, Eliont here again
 ---------------------------------------------------------------------------------------------------
 Version: 1.5.7
 Date: 4-30-25
@@ -12,10 +295,8 @@ Date: 4-30-25
     - EM Train Carriages now glow alongside EM Locomotives
   Changes:
     - lang_ru updated by ashot15
-    - ei_rng switched from UPS expensive factorio rng to deterministic linear congruential generator
   Fixes:
     - reforge_gaia behavior corrected, recursion stabilized. You will need to correct your ship schedule.
-    - alien_spawner.lua transitioned from math.rand to ei_rng
 ---------------------------------------------------------------------------------------------------
 Version: 1.5.6
 Date: 4-19-25
@@ -131,14 +412,14 @@ Date: 03-04-25
   Changes:
     - Platform requests scanner - constant combinator outputting orbiting platform requests sorted by platforms. Can be connected to logistic container in set requests mode.
     - Ported Fueler Tower, can insert burnable fuel to vehicles and take burnt results
-    - Also made fueler supply ammo-turret, artillery-turret, artillery-wagon in range from it own inventory 
+    - Also made fueler supply ammo-turret, artillery-turret, artillery-wagon in range from it own inventory
     - Fueler inventory larger and support filters
     - Ported supersonic EM-trains, with working to full extent EM trains upgrade technologies
     - Ported several Krastorio entities: steel pipe, steel pump, planetary teleporter, wind turbine, gas power station, energy storage, deitherium fusion reactor, advanced steam turbine, antimatter reactor, immersite quarry drill, small roboport, big roboport, greenhouse, electrolysis plant, filtration plant, atmospheric condenser, fluid flare stack, advanced chemical plant, quantum computer, matter plant, matter associator, stablizer charging station, air purifier, fluids, intermediates, immersite and antimatter ammo and rockets, and intergalactic transceiver
     - Rockets can lift up to 20 tons, starter pack weight 20T and create platform with 2000 foundation
     - Larger rocket silo inventory, use custom minimum payload from hub gui to deliver underfull rockets
     - Biolabs feed on nutrients instead of electricity
-    - Stone brick can be crushed back to stone  
+    - Stone brick can be crushed back to stone
     - Large foundry fluid buffer
     - Can dump items to water tiles on Nauvis, Gleba, Aquilo as well as on Fulgora
     - Oil ocean yields crude oil
@@ -159,7 +440,7 @@ Version: 1.3.5
 Date: 18-03-25
   Changes:
     - Yellow splitter and loader use iron-mechanical-parts
-    - Some tech order and unlocks glitches fixed 
+    - Some tech order and unlocks glitches fixed
 ---------------------------------------------------------------------------------------------------
 Version: 1.3.3
 Date: 16-03-25
@@ -177,7 +458,7 @@ Date: 12-03-25
     - Dedicated filter inserter gone, as all inserters can now filter
     - Filter EI containers now 20 / 40 / 120 slots, non-filter 50 / 250 / 1000
     - Fixed some locale strings
-    - Removed duplicating recipes - iron and copper smelting 
+    - Removed duplicating recipes - iron and copper smelting
     - aai-industry: added stone-tablet recipe unlock to electronics
 ---------------------------------------------------------------------------------------------------
 Version: 1.2.1
@@ -191,16 +472,16 @@ Version: 1.2.0
 Date: 04-03-25
   Changes:
     - Basic Lignumis Compatibility
-    - Wood science pack => Dark Age science pack 
-    - Steam science pack => Steam Age science pack  
+    - Wood science pack => Dark Age science pack
+    - Steam science pack => Steam Age science pack
     - This two recipes changed to Lignumis ones
     - Some starting recipes shifted to steam age
 ---------------------------------------------------------------------------------------------------
 Version: 1.1.3
 Date: 03-03-25
   Changes:
-    - Compatibility 
-    - Localization 
+    - Compatibility
+    - Localization
     - Check and remove hidden tech in prerequisites rendering tech unresearchable
     - Option to flatten tech tree (default off)
 ---------------------------------------------------------------------------------------------------
@@ -218,7 +499,7 @@ Version: 1.1.0
 Date: 01-03-25
   Changes:
     - Many fixes for compatibility between different mods
-    - Some fixes for future compatibility between different planets 
+    - Some fixes for future compatibility between different planets
     - May dump items into water tiles on main planets
     - Poor chunks removed
     - Some vanilla changes reverted, sticks, gears craftable

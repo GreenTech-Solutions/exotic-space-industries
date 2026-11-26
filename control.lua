@@ -1,31 +1,38 @@
+--====================================================================================================
+-- EXOTIC SPACE INDUSTRIES - CONTROL STAGE ENTRY POINT
+--====================================================================================================
+-- Event registration and the central update scheduler.
+--
+-- MULTIPLAYER / DESYNC SAFETY
+--   * All mutable state lives in `storage` (saved + synchronised). The global module references
+--     below (ei_lib, ei_black_hole, ...) are constants and identical on every peer.
+--   * The round-robin scheduler derives its step from `game.tick` instead of a Lua variable,
+--     so a client that just joined executes exactly the same updates as the server.
+--====================================================================================================
+
 if script.active_mods["gvv"] then require("__gvv__.gvv")() end
 require("util")
+local migrated_storage = require("migrated_storage")
+
 --====================================================================================================
---REQUIREMENTS
+--MODULES
 --====================================================================================================
+-- Shared modules are exposed as globals because they reference each other (e.g. fusion reactor ->
+-- neutron collector). They only contain functions and constant tables.
 
 ei_lib = require("lib/lib")
 ei_data = require("lib/data")
+ei_echo_codex = require("lib/echo_codex")
+ei_loaders_lib = require("lib/ei_loaders_lib")
 
--- Used if gaia spawned in malformed, called in reforge_gaia
-local ei_full_gaia_map_gen_settings = require("prototypes/alien_structures/reforge-gaia-table")
-
-local ok, result = pcall(function()
-  return require("scripts/control/ei_rng")
-end)
-ei_rng = result
-if not ok then
-  log("‼️ Failed to require ei_rng: " .. tostring(result))
-else
-  log("✅ ei_rng loaded.")
-end
-
+local ei_util = require("scripts/control/util")
 local ei_tech_scaling = require("scripts/control/tech_scaling")
 local ei_global = require("scripts/control/global")
 local ei_register = require("scripts/control/register_util")
 local ei_powered_beacon = require("scripts/control/powered_beacon")
 local ei_beacon_overload = require("scripts/control/beacon_overload")
 local ei_spidertron_limiter = require("scripts/control/spidertron_limiter")
+local mod_gui = require("mod-gui")
 
 ei_victory = require("scripts/control/victory_disabler")
 ei_alien_spawner = require("scripts/control/alien_spawner")
@@ -42,840 +49,663 @@ ei_gate = require("scripts/control/gate")
 ei_alien_system = require("scripts/control/alien_system")
 ei_debug = require("scripts/control/debug")
 ei_compat = require("scripts/control/compat")
-ei_loaders_lib = require("lib/ei_loaders_lib")
 
 ei_fueler = require("scripts/control/fueler/fueler")
 ei_fueler_informatron = require("scripts/control/fueler/informatron")
 
 em_trains = require("scripts/control/em-trains/charger")
 em_trains_gui = require("scripts/control/em-trains/gui")
-em_trains_informatron = require("scripts/control/em-trains/informatron")
 
 orbital_combinator = require("scripts/control/orbital_combinator")
+ei_storm_emp = require("scripts/control/storm_emp")
+ei_radio_station = require("scripts/control/radio_station")
+ei_drone_port = require("scripts/control/drone_port")
+ei_alien_console = require("scripts/control/alien_console")
 
+-- startup settings (constant for the whole session and identical on every peer)
+ei_ticksPerFullUpdate = settings.startup["ei-ticks_per_full_update"].value
+ei_maxEntityUpdates = settings.startup["ei-max_updates_per_tick"].value
 
---====================================================================================================
---EVENTS
---====================================================================================================
+-- remote interfaces and commands have to be registered in the main chunk (every load)
+ei_victory.add_interface()
 
-function youHaveArrived(player)
-  if not player then return end
-  if not player.valid then return end
-  
-  if not player then
-      log("youHaveArrived received null player")
-      return
-  end
-  local surface = player.surface
-  if not surface then return end
-  if not surface.valid then return end
-  local pos = player.position
-  local force = player.force or 1
-  if not surface or not pos or not force then
-      log("youHaveArrived received null surface or pos or force for player ")
-      return
-  else
-      -- Draw multiple electric beams in a ring around the player
-      for i = 1, 12 do
-          local angle = (math.pi * 2 / 12) * i
-          local offset = {
-              x = pos.x + math.cos(angle) * 5,
-              y = pos.y + math.sin(angle) * 5
-          }
-          surface.create_entity{
-              name = "electric-beam",
-              source = offset,
-              position = pos,
-              target = player.character,
-              duration = 120,
-              force = force
-          }
-      end
-
-      -- Summon a "portal"—use smoke or other suitable entity
-      for i = 1, 5 do
-          surface.create_entity{
-              name = "big-artillery-explosion", -- visually dramatic
-              position = {
-                  x = pos.x + ei_rng.float("portalboom") * 2 - 1,
-                  y = pos.y + ei_rng.float("portalboom") * 2 - 1
-              },
-              position = pos,
-              force = force
-          }
-      end
-
-      surface.create_trivial_smoke{
-          name = "electric-smoke",
-          position = pos
-      }
-      local player_indices = {}
-      for _, player in pairs(game.connected_players) do
-        table.insert(player_indices, player.index)
-      end
-      if not ei_lib.getn(player_indices) then return end
-      rendering.draw_light{
-          sprite = "utility/light_medium",
-          target = pos,
-          surface = surface,
-          color = {r = 0.6, g = 0.1, b = 1.0},
-          intensity = 1.5,
-          scale = 4.0,
-          time_to_live = 180,
-          players = player_indices
-      }
-
-      -- rendering.draw_text{
-      --     text = "⟬ THE SYSTEM STIRS ⟭",
-      --     surface = surface,
-      --     target = pos,
-      --     color = {r = 1.0, g = 0.0, b = 0.8},
-      --     alignment = "center",
-      --     scale = 2.5,
-      --     font = "default-large-bold",
-      --     time_to_live = 300,
-      --     players = player_indices
-      -- }
-  end
-ei_lib.crystal_echo("Fragments of GAIA's lament ripple across space-time...")
-ei_lib.crystal_echo("⟬ THE SYSTEM STIRS ⟭","default-bold")
-ei_lib.crystal_echo("⚠️ YOU HAVE BEEN SEEN ⚠️","default-bold")
-end
-
---INIT
-------------------------------------------------------------------------------------------------------
-script.on_init(function()
-    remote.call("freeplay", "set_disable_crashsite", true)
-
-    -- setup storage table
-    ei_global.init()
-    ei_global.check_init()
-
-    -- init other
-    ei_tech_scaling.init()
-    ei_register.init({"copper_beacon"}, true)
-    ei_register.init({"fluid_entity"}, false)
-
-    -- disable vanilla victory condition by rocket launch
-    ei_victory.init()
-    em_trains.check_global()
-    em_trains_gui.mark_dirty()
-    ei_compat.check_init()
-    orbital_combinator.check_init()
-    ei_lib.crystal_echo("☄ [Somnolent Awakening] — Gaia stirs from her dream-slumber; her shell begins to coalesce…")
-    game.planets["Gaia"]:create_surface(ei_full_gaia_map_gen_settings) --works
-    ei_lib.crystal_echo("✧ [Awakened Triumph] — Gaias shell stands firm, yet the dreams murmur endures…")
-    ei_lib.crystal_echo("✧ [Gaias Heart] — The crystalline veins of Gaia pulse with life, awaiting the touch of her children…") 
-    storage.ei.gaia_reforged = 1 --0=pre reforge, 1 = post reforge/valid surface, additional #s for future planetary evolution
+commands.add_command("esi-gaia-reborn", "Checks the Gaia surface and regenerates it if its resources are missing (admin only).", function(command)
+    ei_echo_codex.gaia_reborn(command)
 end)
 
---ENTITY RELATED
-------------------------------------------------------------------------------------------------------
+--====================================================================================================
+--UPDATE SCHEDULER
+--====================================================================================================
+-- Entity updaters are spread over `ei_ticksPerFullUpdate` ticks: every tick exactly one updater
+-- runs (chosen by game.tick), and it processes enough entities so that every registered entity is
+-- visited once per full cycle (capped by the "max updates per tick" setting).
+-- Each updater processes ONE entity per call and returns false when it has nothing to do.
+
+
+---Возвращает количество элементов в таблице.
+---@param tbl table|nil Таблица для подсчёта элементов.
+---@return integer Количество элементов в таблице или 0.
+local function count(tbl)
+    -- Если таблица передана, возвращаем её размер, иначе 0
+    return tbl and table_size(tbl) or 0
+end
+
+
+
+local UPDATERS = {
+    {
+        update = function() return ei_powered_beacon.update() end,
+        count = function() return count(storage.ei.copper_beacon and storage.ei.copper_beacon.master) end,
+    },
+    {
+        update = function() return ei_powered_beacon.update_fluid_storages() end,
+        count = function() return count(storage.ei.fluid_entity) end,
+    },
+    {
+        update = function() return ei_neutron_collector.update() end,
+        count = function() return count(storage.ei.neutron_sources) end,
+    },
+    {
+        update = function() return ei_matter_stabilizer.update() end,
+        count = function() return count(storage.ei.matter_machines) end,
+    },
+    {
+        update = function() return orbital_combinator.update() end,
+        count = function() return count(storage.ei.orbital_combinators) end,
+    },
+    {
+        update = function() return ei_fueler.updater() end,
+        count = function() return count(storage.ei.fueler) end,
+    },
+    {
+        update = function() return ei_gate.update() end,
+        count = function() return count(storage.ei.gate and storage.ei.gate.gate) end,
+    },
+    {
+        update = function() return em_trains.train_updater() end,
+        count = function() return count(storage.ei_emt and storage.ei_emt.trains) end,
+    },
+    {
+        update = function() return em_trains.charger_updater() end,
+        count = function() return count(storage.ei_emt and storage.ei_emt.chargers) end,
+    },
+}
+
+-- how many times each updater runs per full update cycle
+local UPDATER_CALLS_PER_CYCLE = math.max(1, ei_ticksPerFullUpdate / #UPDATERS)
+
+
+
+---Запускает апдейтер сущностей по круговой системе (round-robin) для текущего тика.
+---@param tick integer Номер текущего игрового тика.
+local function run_entity_updater(tick)
+    -- Выбираем апдейтер из списка по номеру тика
+    local updater = UPDATERS[tick % #UPDATERS + 1]
+
+    -- Подсчитываем количество зарегистрированных сущностей
+    local entities = updater.count()
+    if entities == 0 then
+        return
+    end
+
+    -- Вычисляем требуемое количество обновлений на текущий тик
+    local updates = math.ceil(entities / UPDATER_CALLS_PER_CYCLE)
+    updates = ei_util.clamp(updates, 1, ei_maxEntityUpdates)
+
+    -- Выполняем порцию обновлений сущностей
+    for _ = 1, updates do
+        if not updater.update() then
+            break
+        end
+    end
+end
+
+
+
+script.on_event(defines.events.on_tick, function(event)
+    if not storage.ei then
+        return
+    end
+
+    run_entity_updater(event.tick)
+
+    -- updates that run every tick (cheap when there is nothing to do)
+    em_trains_gui.updater()
+    ei_alien_spawner.update()
+
+    -- drones fly every tick, their task logic runs every few ticks
+    ei_drone_port.update(event.tick)
+
+    -- alien terminals convert resonance packs / data into knowledge every few ticks
+    ei_alien_console.update(event.tick)
+
+    -- radio stations transfer their channels every few ticks
+    if event.tick % ei_radio_station.UPDATE_INTERVAL == 0 then
+        ei_radio_station.update()
+    end
+    ei_induction_matrix.update()
+    ei_black_hole.update()
+end)
+
+-- once per second (NOTE: only one handler per nth-tick value can be registered)
+script.on_nth_tick(60, function()
+    if not storage.ei then
+        return
+    end
+
+    -- EM train buffs are re-read regularly (research can also be granted by scripts/commands)
+    em_trains.check_buffs()
+
+    -- Gaia storm EMP: re-activate machines whose EMP expired
+    ei_storm_emp.update()
+
+    -- Gaia reforge state machine (only active after /esi-gaia-reborn)
+    if storage.ei.gaia_reforged == 0 then
+        ei_echo_codex.reforge_gaia_surface()
+    end
+end)
+
+--====================================================================================================
+--INIT AND MIGRATION
+--====================================================================================================
+
+
+---Удаляет старые элементы пользовательского интерфейса, имя которых начинается с "ei_".
+local function remove_legacy_guis()
+    -- Обходим всех игроков на сервере
+    for _, player in pairs(game.players) do
+        local roots = {player.gui.top, player.gui.left, player.gui.center, player.gui.screen, player.gui.relative,
+                       mod_gui.get_button_flow(player), mod_gui.get_frame_flow(player)}
+
+        -- Проверяем каждый контейнер GUI игрока
+        for _, root in pairs(roots) do
+            -- Удаляем элементы с устаревшим префиксом "ei_"
+            for _, child in pairs(root.children) do
+                if child.valid and child.name and string.sub(child.name, 1, 3) == "ei_" then
+                    child.destroy()
+                end
+            end
+        end
+    end
+end
+
+
+
+---Обновляет все исполняемые данные, зависящие от прототипов или настроек запуска.
+local function refresh_runtime_data()
+    -- Инициализируем и проверяем глобальные модули и настройки
+    ei_global.check_init()
+    ei_tech_scaling.init()
+    ei_victory.init()
+    ei_compat.check_init()
+    orbital_combinator.check_init()
+    em_trains.check_global()
+    em_trains.check_buffs()
+    em_trains_gui.mark_dirty()
+end
+
+
+
+script.on_init(function()
+    local old = migrated_storage.take({"exotic-space-industries"})
+    if old then
+        migrated_storage.adopt(old)
+    end
+
+    if remote.interfaces["freeplay"] then
+        remote.call("freeplay", "set_disable_crashsite", true)
+    end
+
+    ei_global.init()
+    refresh_runtime_data()
+
+    if game.planets["Gaia"] and not game.get_surface("Gaia") then
+        game.planets["Gaia"].create_surface()
+    end
+end)
+
+script.on_configuration_changed(function(event)
+    local old = migrated_storage.take({"exotic-space-industries"})
+    if old then
+        migrated_storage.adopt(old)
+    end
+
+    refresh_runtime_data()
+    ei_tech_scaling.on_research_finished()
+
+    -- stop any Gaia reforge that was running while the game was saved
+    storage.ei.gaia_reforged = 1
+
+    local own_changes = event.mod_changes and event.mod_changes["exotic-space-industries-razi"]
+    if own_changes then
+        -- migrations of older saves (all of them are idempotent)
+        ei_black_hole.migrate()
+        ei_matter_stabilizer.migrate()
+        ei_fueler.migrate()
+        em_trains.migrate()
+        -- 3.1.0: combinator computing ports, alien tree tiers 4/5, gate hub rule
+        orbital_combinator.migrate()
+        ei_alien_system.migrate()
+        ei_gate.check_global_init()
+        ei_gate.migrate()
+        -- 3.2.0: ei-conduit-gaia instead of ruin attractors (alien_system.migrate above also
+        -- grandfathers the now script-only alien technologies)
+        ei_gaia.migrate_conduits()
+        ei_alien_console.migrate()
+        remove_legacy_guis()
+
+        -- rebuild registries that older versions could leave with duplicates/stale entries
+        em_trains.reinitialize_chargers()
+        em_trains.reinitialize_trains()
+        em_trains.update_rail_counts()
+
+        ei_lib.crystal_echo("ESI: CONFIGURATION CHANGED", "default-bold")
+    end
+end)
+
+--====================================================================================================
+--ENTITY HANDLERS
+--====================================================================================================
+
+
+---Регистрирует свежепостроенную сущность во всех соответствующих подсистемах мода.
+---@param entity LuaEntity Созданная сущность.
+---@param event table Исходное событие постройки.
+local function on_built_entity(entity, event)
+    -- Проверяем валидность созданной сущности
+    if not ei_util.is_valid(entity) then
+        return
+    end
+
+    -- Регистрируем сущность с флюидной обработкой при необходимости
+    if ei_powered_beacon.counts_for_fluid_handling(entity) then
+        ei_register.register_fluid_entity(entity)
+    end
+
+    -- Медные и железные маяки: создаём ведущую сущность и невидимый ведомый элемент
+    if entity.name == "ei-copper-beacon" or entity.name == "ei-iron-beacon" then
+        local master_unit = ei_register.register_master_entity("copper_beacon", entity)
+        local slave = ei_register.make_slave("copper_beacon", master_unit, entity.name .. "_slave", {x = 0, y = 0})
+        ei_register.link_slave("copper_beacon", master_unit, slave, "slave_assembler")
+        ei_register.init_beacon("copper_beacon", master_unit)
+        ei_register.add_spaced_update()
+    end
+
+    -- Оповещаем остальные подсистемы о постройке сущности
+    ei_beacon_overload.on_built_entity(entity)
+    ei_neutron_collector.on_built_entity(entity)
+    ei_fusion_reactor.on_built_entity(entity)
+    ei_matter_stabilizer.on_built_entity(entity)
+    ei_induction_matrix.on_built_entity(entity)
+    ei_black_hole.on_built_entity(entity)
+    ei_gate.on_built_entity(entity)
+    ei_fueler.on_built_entity(entity)
+    em_trains.on_built_entity(entity)
+    orbital_combinator.add(entity)
+    ei_radio_station.on_built_entity(entity)
+    ei_drone_port.on_built_entity(entity)
+
+    -- Погрузчики привязываются только при ручной постройке
+    if event.name == defines.events.on_built_entity then
+        ei_loaders_lib.on_built_entity(entity)
+    end
+
+    -- Проверка ограничений постройки на планете Gaia
+    if entity.valid then
+        ei_gaia.on_built_entity(entity)
+    end
+
+    -- Регистрация терминала инопланетян
+    if entity.valid then
+        ei_alien_console.on_built_entity(entity)
+    end
+end
+
+
 
 script.on_event({
     defines.events.on_built_entity,
     defines.events.on_robot_built_entity,
+    defines.events.on_space_platform_built_entity,
     defines.events.script_raised_built,
     defines.events.script_raised_revive,
-    --defines.events.on_entity_cloned
-    }, function(e)
-    on_built_entity(e)
+}, function(event)
+    on_built_entity(event.entity, event)
 end)
+
+---Entities cloned by other mods (e.g. Warp Drive Machine moving a ship).
+---Only simple registries are copied; compound entities are not supported.
+script.on_event(defines.events.on_entity_cloned, function(event)
+    local source = event.source
+    local destination = event.destination
+    if not ei_util.is_valid(destination) then
+        return
+    end
+
+    local name = destination.name
+    if name == "ei-orbital-combinator-computing-port" then
+        -- ports belong to their combinator: the cloned combinator creates / reuses its own port
+        destination.destroy()
+    elseif name == "ei-fueler" then
+        ei_fueler.on_entity_cloned(source, destination)
+    elseif name == "ei-black-hole" then
+        ei_black_hole.register_black_hole(destination, source.valid and ei_black_hole.get(source.unit_number) or nil)
+    elseif name == ei_radio_station.OUTPUT or ei_radio_station.STATIONS[name] then
+        ei_radio_station.on_entity_cloned(source, destination)
+    elseif name == ei_drone_port.PORT or name == ei_drone_port.ENERGY then
+        ei_drone_port.on_entity_cloned(destination)
+    elseif name == ei_alien_console.NAME then
+        ei_alien_console.register(destination)
+    else
+        if ei_powered_beacon.counts_for_fluid_handling(destination) then
+            ei_register.register_fluid_entity(destination)
+        end
+        ei_neutron_collector.on_built_entity(destination)
+        ei_matter_stabilizer.on_built_entity(destination)
+        em_trains.on_built_entity(destination)
+        orbital_combinator.add(destination)
+    end
+end)
+
+---Обрабатывает уничтожение или демонтаж сущности перед её фактическим удалением.
+---@param event table Данные события уничтожения/демонтажа сущности.
+local function on_destroyed_entity(event)
+    local entity = event.entity
+    if not ei_util.is_valid(entity) then
+        return
+    end
+
+    -- Определяем инициатора демонтажа (робот или игрок)
+    local transfer = event.robot or event.player_index
+
+    -- Удаляем сущность из гидравлического реестра при необходимости
+    if ei_powered_beacon.counts_for_fluid_handling(entity) then
+        ei_register.deregister_fluid_entity(entity)
+    end
+
+    -- Удаляем медные/железные маяки и связанные с ними ведомые элементы
+    if entity.name == "ei-copper-beacon" or entity.name == "ei-iron-beacon" then
+        local master = storage.ei.copper_beacon.master[entity.unit_number]
+        if master then
+            ei_register.unregister_slave_entity("copper_beacon", master.slaves.slave_assembler, entity, true)
+            ei_register.unregister_master_entity("copper_beacon", entity.unit_number)
+            ei_register.subtract_spaced_update()
+        end
+    end
+
+    -- Очищаем данные сущности во всех системах
+    ei_beacon_overload.on_destroyed_entity(entity)
+    ei_neutron_collector.on_destroyed_entity(entity)
+    ei_alien_spawner.on_destroyed_entity(entity)
+    ei_matter_stabilizer.on_destroyed_entity(entity)
+    ei_induction_matrix.on_destroyed_entity(entity)
+    ei_black_hole.on_destroyed_entity(entity, transfer)
+    ei_gate.on_destroyed_entity(entity, transfer)
+    ei_fueler.on_destroyed_entity(entity, transfer)
+    em_trains.on_destroyed_entity(entity)
+    orbital_combinator.rem(entity)
+    ei_storm_emp.on_destroyed_entity(entity)
+    ei_gaia.on_destroyed_entity(entity)
+    ei_radio_station.on_destroyed_entity(entity)
+    ei_drone_port.on_destroyed_entity(entity)
+    ei_alien_console.on_destroyed_entity(entity)
+
+    -- Если артефакт инопланетян уничтожен, начисляем инопланетные знания
+    if event.name == defines.events.on_entity_died then
+        ei_alien_system.on_entity_died(event)
+    end
+end
+
+
 
 script.on_event({
     defines.events.on_entity_died,
-	defines.events.on_pre_player_mined_item,
-	defines.events.on_robot_pre_mined,
-	defines.events.script_raised_destroy
-    }, function(e)
-    on_destroyed_entity(e)
+    defines.events.on_pre_player_mined_item,
+    defines.events.on_robot_pre_mined,
+    defines.events.on_space_platform_pre_mined,
+    defines.events.script_raised_destroy,
+}, on_destroyed_entity)
+
+-- after a SUCCESSFUL mining action (the pre-mined events above also fire when mining fails)
+script.on_event({
+    defines.events.on_player_mined_entity,
+    defines.events.on_robot_mined_entity,
+}, function(event)
+    ei_alien_system.on_mined_entity(event)
 end)
 
 script.on_event({
     defines.events.on_player_built_tile,
-    defines.events.on_robot_built_tile
-    }, function(e)
-    on_built_tile(e)
+    defines.events.on_robot_built_tile,
+}, function(event)
+    ei_induction_matrix.on_built_tile(event)
 end)
 
 script.on_event({
     defines.events.on_player_mined_tile,
-    defines.events.on_robot_mined_tile
-    }, function(e)
-    on_destroyed_tile(e)
+    defines.events.on_robot_mined_tile,
+}, function(event)
+    ei_induction_matrix.on_destroyed_tile(event)
 end)
 
-script.on_event(defines.events.on_tick, function() 
-    updater()
-end)
---[[
-script.on_nth_tick(settings.startup["ei-ticks_per_spaced_update"].value, function(e)
-    spaced_updater()
-end)
-]]
+--====================================================================================================
+--OTHER GAME EVENTS
+--====================================================================================================
 
-script.on_nth_tick(6000, function(e)
-    ei_compat.nth_tick(e)
-  end)
-  
-
-script.on_event(defines.events.on_console_command, function(e)
-    ei_alien_spawner.give_tool(e)
-    ei_gaia.spawn_command(e)
-    ei_debug.teleport_to(e)
+script.on_event(defines.events.on_console_command, function(event)
+    ei_alien_spawner.give_tool(event)
+    ei_gaia.spawn_command(event)
+    ei_debug.teleport_to(event)
 end)
 
-script.on_event(defines.events.on_player_selected_area, function(e)
-    ei_alien_spawner.on_player_selected_area(e)
-    ei_alien_system.on_player_selected_area(e)
+script.on_event(defines.events.on_player_selected_area, function(event)
+    ei_alien_spawner.on_player_selected_area(event)
+    ei_alien_system.on_player_selected_area(event)
+    ei_drone_port.on_player_selected_area(event, false)
 end)
 
-script.on_event(defines.events.on_selected_entity_changed, function(e)
-    ei_matter_stabilizer.on_selected_entity_changed(e)
+-- alt selection with the drone remote cancels the target selection
+script.on_event(defines.events.on_player_alt_selected_area, function(event)
+    ei_drone_port.on_player_selected_area(event, true)
 end)
 
-script.on_event(defines.events.on_player_cursor_stack_changed, function(e)
-    ei_matter_stabilizer.on_player_cursor_stack_changed(e)
+script.on_event(defines.events.on_selected_entity_changed, function(event)
+    ei_matter_stabilizer.on_selected_entity_changed(event)
 end)
 
-script.on_event(defines.events.on_entity_logistic_slot_changed, function(e)
-    ei_spidertron_limiter.on_entity_logistic_slot_changed(e)
+script.on_event(defines.events.on_player_cursor_stack_changed, function(event)
+    ei_matter_stabilizer.on_player_cursor_stack_changed(event)
 end)
 
---RESEARCH RELATED
-------------------------------------------------------------------------------------------------------
-script.on_event(defines.events.on_research_finished, function(e)
+script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
+    ei_spidertron_limiter.on_entity_logistic_slot_changed(event)
+end)
 
-    -- set new tech costs
+script.on_event(defines.events.on_research_finished, function(event)
     ei_tech_scaling.on_research_finished()
-
-    -- notify player for informatron changes
-    ei_informatron_messager.on_research_finished(e)
-
-    em_trains.on_research_finished(e)
-
+    ei_informatron_messager.on_research_finished(event)
+    em_trains.on_research_finished(event)
+    ei_alien_system.on_research_finished(event)
 end)
 
---WORLD RELATED
-------------------------------------------------------------------------------------------------------
-script.on_event(defines.events.on_chunk_generated, function(e)
-    ei_alien_spawner.on_chunk_generated(e)
-end)
-
-script.on_event(defines.events.on_player_respawned, function(event)
-  local player = game.players[event.player_index]
-  if player.character then
-    player.character.clear_items_inside()
-  end
-end)
-
---GUI RELATED
------------------------------------------------------------------------------------------------------
-
-function rocket_silo_gui_open(event)
-	if event.gui_type ~= defines.gui_type.entity then return end
-	if event.entity.type ~= "rocket-silo" then return end
-  game.get_player(event.player_index).cheat_mode = true
-end
-
-function rocket_silo_gui_close(event)
-	if event.gui_type ~= defines.gui_type.entity then return end
-	if event.entity.type ~= "rocket-silo" then return end
-  game.get_player(event.player_index).cheat_mode = false
-end
-
-script.on_event(defines.events.on_gui_opened, function(event)
-    local name = event.entity and event.entity.name
-
-    if not name then
-      return
-    elseif name == "ei-fusion-reactor" then
-        ei_fusion_reactor.open_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif ei_induction_matrix.core[name] then
-        ei_induction_matrix.open_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei-black-hole" then
-        ei_black_hole.open_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei-gate-container" then
-        ei_gate.open_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei_fueler" then
-        ei_fueler.open_gui(game.get_player(event.player_index))
-    end
-
-    rocket_silo_gui_open(event)
-end)
-
-script.on_event(defines.events.on_gui_closed, function(event)
-    local name = event.entity and event.entity.name
-    local element_name = event.element and event.element.name
-
-    if name == "ei-fusion-reactor" then
-       ei_fusion_reactor.close_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif element_name == "ei-induction-matrix-console" then
-        ei_induction_matrix.close_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei-black-hole" then
-        ei_black_hole.close_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei-gate-container" then
-        ei_gate.close_gui(game.get_player(event.player_index) --[[@as LuaPlayer]])
-    elseif name == "ei_fueler" then
-        ei_fueler.close_gui(game.get_player(event.player_index))
-    end
-
-    rocket_silo_gui_close(event)
-end)
-
-script.on_event(defines.events.on_gui_click, function(event)
-    local parent_gui = event.element.tags.parent_gui
-    if not parent_gui then return end
-
-    if parent_gui == "ei-fusion-reactor-console" then
-        ei_fusion_reactor.on_gui_click(event)
-    elseif parent_gui == "ei-induction-matrix-console" then
-        ei_induction_matrix.on_gui_click(event)
-    elseif parent_gui == "ei-black-hole-console" then
-        ei_black_hole.on_gui_click(event)
-    elseif parent_gui == "ei-gate-console" then
-        ei_gate.on_gui_click(event)
-    elseif parent_gui == "ei-alien-gui" then
-        ei_alien_system.on_gui_click(event)
-    elseif parent_gui == "ei_fueler-console" then
-        ei_fueler.on_gui_click(event)
-    elseif parent_gui == "mod_gui" then
-      em_trains_gui.on_gui_click(event)
-    elseif parent_gui == "em_trains_mod-gui" then
-      em_trains_gui.on_gui_click(event)
-
-    end
-
-
-end)
-
-script.on_event(defines.events.on_gui_value_changed, function(event)
-    local parent_gui = event.element.tags.parent_gui
-    if not parent_gui then return end
-
-    if parent_gui == "ei-fusion-reactor-console" then
-        ei_fusion_reactor.on_gui_value_changed(event)
-    end
-end)
-
-script.on_event(defines.events.on_gui_selection_state_changed, function(event)
-    local parent_gui = event.element.tags.parent_gui
-    if not parent_gui then return end
-
-    if parent_gui == "ei-gate-console" then
-        ei_gate.on_gui_selection_state_changed(event)
-    end
+script.on_event(defines.events.on_chunk_generated, function(event)
+    ei_gaia.on_chunk_generated(event)
+    ei_alien_spawner.on_chunk_generated(event)
 end)
 
 script.on_event(defines.events.on_script_trigger_effect, function(event)
     if event.effect_id == "ei-gate-remote" then
         ei_gate.used_remote(event)
+    elseif event.effect_id == "ei-storm-emp" then
+        ei_storm_emp.on_strike(event)
     end
 end)
 
---OTHER
-------------------------------------------------------------------------------------------------------
-
-local patch_resources = {
-  "ei-phytogas-patch",
-  "ei-cryoflux-patch",
-  "ei-ammonia-patch",
-  "ei-morphium-patch",
-  "ei-coal-gas-patch"
-}
-
-function surface_contains_any_resources(surface)
-  if not surface or not surface.count_entities_filtered then
-    log("surface_contains_any_resources: invalid surface object passed")
-    return false
-  end
-  for _, resource_name in pairs(patch_resources) do
-    local found = surface.count_entities_filtered{
-      name = resource_name,
-      type = "resource"
-    }
-    if found > 0 then
-      return true, resource_name, found
+-- respawned characters start empty (no free pistol + ammo from freeplay)
+script.on_event(defines.events.on_player_respawned, function(event)
+    local player = game.get_player(event.player_index)
+    if player and player.character then
+        player.character.clear_items_inside()
     end
-  end
-  return false
-end
-
---Uncomment me to teleport to Gaia to test reforge_gaia_surface produced valid result :)
---[[
-commands.add_command("goto-gaia", "Teleport to Gaia's surface", function(cmd)
-    local player = game.get_player(cmd.player_index)
-    if not player then return end
-    local planet = game.planets["Gaia"]
-    local surface = planet and planet.surface
-    if not surface then
-        player.print("[Exotic Space Industries] Gaia surface not found.")
-        return
-    end
-    local position = {0, 0}  -- center of the world
-    player.teleport(position, surface)
-    ei_lib.crystal_echo("✈ [Astral Transit] — " .. player.name .. " arrives upon Gaia’s crust.")
-end)
-]]
-function reforge_gaia_surface()
-    if true then return end
-    local planet_name = "Gaia"
-    local planet = game.planets[planet_name]
-    if not planet then
-        ei_lib.crystal_echo("[Void’s Echo] — Gaia’s name lies unwritten; the rite dissolves into silent void.")
-        return
-    end
-
-    local gaia_settings = ei_full_gaia_map_gen_settings
-    local function checksum(tbl)
-        local s = serpent.block(tbl, {sortkeys=true, numformat="%0.8f"})
-        local sum = 0 for i = 1, #s do sum = (sum + s:byte(i)) % 2147483647 end
-        return sum
-    end
-
-    -- 1) Grab old Gaia surface, if any
-    local old_surface = planet.surface
-
-    -- 2) If old exists and matches desired settings with resources, do nothing
-    if old_surface and old_surface.valid then
-        if checksum(old_surface.map_gen_settings) == checksum(gaia_settings) then
-            local has, res, cnt = surface_contains_any_resources(old_surface)
-            if has then
-                ei_lib.crystal_echo("✔ [Echo Intact] — " .. res .. " crystals detected (" .. cnt .. "). Gaia stands.")
-                storage.ei.gaia_reforged = 1
-                return
-            end
-        end
-    end
-
-    -- 3) Evacuate any players still on old Gaia
-    if old_surface and old_surface.valid then
-        for _, player in pairs(game.connected_players) do
-            if player.surface == old_surface then
-                ei_lib.crystal_echo("⚠ [Displacement] — Shunting " .. player.name .. " off world.")
-                local x = ei_rng.int(player.name .. "-x", 0, 20) or 0
-                local y = ei_rng.int(player.name .. "-y", 0, 20) or 0
-                if not x then x = 0 end
-                if not y then y = 0 end
-                player.teleport({x, y}, "nauvis")
-                youHaveArrived(player)
-            end
-        end
-        ei_lib.crystal_echo("✖ [Silence] — No crystal veins resonate. Calling Gaia into the void…")
-    end
-
-    -- 4) Stage a new surface via low-level API
-    local map_gen = util.table.deepcopy(gaia_settings)
-    map_gen.name = nil
-    -- error(planet_name)
-    game.delete_surface(game.surfaces[planet_name])
-    if game.surfaces[planet_name] then planet_name = 'gaia' end
-    if game.surfaces[planet_name] then planet_name = 'Gaia' end
-    local new_surface = game.create_surface(planet_name, map_gen)
-    if not new_surface or not new_surface.valid then
-        ei_lib.crystal_echo("[Invocation Fracture] — Failed to birth Gaia’s new form; dusk endures.")
-        return
-    end
-
-    -- 5) Associate new surface with the planet
-    planet.associate_surface(new_surface)
-
-    -- 6) Delete old surface after associating
-    if old_surface and old_surface.valid then
-        game.delete_surface(old_surface.name)
-    end
-
-    ei_lib.crystal_echo("✧ [Resurrection] — Gaia’s heart ignites once more upon a cleansed crust.")
-    storage.ei.gaia_reforged = 1
-end
-
-
-script.on_configuration_changed(function(e)
-    -- Only trigger when *this* mod changes version
-    if e.mod_changes and e.mod_changes["exotic-space-industries"] then
-
-        local val = ei_lib.config("em_updater_que") or "Beam"
-        if val == "Beam" then
-            storage.ei.em_train_que = 1
-        elseif val == "Ring" then
-            storage.ei.em_train_que = 2 --faster to compare a number
-        else
-            storage.ei.em_train_que = 0
-        end
-    
-        val = ei_lib.config("em_updater_que_width")
-        storage.ei.que_width = (val ~= nil) and val or 6
-    
-        val = ei_lib.config("em_updater_que_transparency")
-        storage.ei.que_transparency = ((val ~= nil) and val or 80) / 100
-    
-        val = ei_lib.config("em_updater_que_timetolive")
-        storage.ei.que_timetolive = (val ~= nil) and val or 60
-    
-        val = ei_lib.config("em_train_glow_toggle")
-        storage.ei.em_train_glow_toggle = (val ~= nil) and val or true
-    
-        val = ei_lib.config("em_train_glow_timetolive")
-        storage.ei.em_train_glow_timeToLive = (val ~= nil) and val or 60
-    
-        val = ei_lib.config("em_charger_glow_toggle")
-        storage.ei.em_charger_glow = (val ~= nil) and val or true
-    
-        val = ei_lib.config("em_charger_glow_timetolive")
-        storage.ei.em_charger_glow_timeToLive = (val ~= nil) and val or 60
-        local modes = {
-            [0] = "✦ NULL-STATE :: INERTIA LOCKED",
-            [1] = "✴ AXIS-FIRE :: DIRECTED CONVERGENCE BEAM",
-            [2] = "⟁ OMNI-RESONANCE :: PHASE RING ARRAY"
-        }
-        ei_lib.crystal_echo("『EM CHARGER QUE MODE HAS SHIFTED』 → "..modes[storage.ei.em_train_que].." ("..storage.ei.em_train_que..")","default-bold")
-    
-        em_trains.check_global() --no nil tables
-        em_trains.check_buffs() --updates global buff vals
-        em_trains.printBuffStatus()
-        em_trains.reinitialize_chargers() --applies updated buffs
-        em_trains.reinitialize_trains()
-        em_trains.update_rail_counts()
-        em_trains_gui.mark_dirty()
-    
-        ei_lib.crystal_echo("⟦✦ TRANSCENSION RECOGNIZED ✦⟧","default-bold")
-        ei_lib.crystal_echo("⫷ Sub-layer Recalibration Initiated ⫸")
-        ei_lib.crystal_echo("⫷ Core Heuristics Have Shifted ⫸")
-        ei_lib.crystal_echo("CONFIGURATION CHANGED – BY WHOM, WE DARE NOT NAME","default-bold")
-
-        storage.ei.original_gaia_settings = full_gaia_map_gen_settings
-
-        reforge_gaia_surface() --Must be called AFTER check_global
-
-    end
-    ei_tech_scaling.init()
-    ei_victory.init()  -- Required for Better Victory Screen
-    ei_global.check_init()
-    orbital_combinator.check_init()
 end)
 
+script.on_event(defines.events.on_player_created, function()
+    em_trains_gui.mark_dirty() -- adds the EM trains mod GUI button for the new player
+end)
 
-script.on_event(
-  {
+-- a removed player can not return from a gate exit selection: give the character back its flags
+script.on_event(defines.events.on_pre_player_removed, function(event)
+    ei_gate.finish_remote(event.player_index, true)
+    ei_matter_stabilizer.clear_player(event.player_index)
+end)
+
+script.on_event({
     defines.events.on_player_joined_game,
     defines.events.on_cutscene_cancelled,
-    defines.events.on_cutscene_finished
-  },
-  function(event)
+    defines.events.on_cutscene_finished,
+}, function(event)
+    -- a player that left while selecting a gate exit returns to his character now
+    if event.name == defines.events.on_player_joined_game then
+        ei_gate.finish_remote(event.player_index)
+    end
+
     local player = game.get_player(event.player_index)
     if player and player.valid and player.character then
-        youHaveArrived(player.character)
-        if player.name then
-            log(">> Arrival event triggered for player: " .. player.name)
-        end
+        -- greeting only for the arriving player
+        ei_lib.crystal_echo("INITIALIZING SYSTEM CORE: EXOTIC SPACE INDUSTRIES", "default-bold", player)
+        ei_lib.crystal_echo("Fragments of GAIA lament ripple across space-time...", "default-bold", player)
     end
-  end
-)
+end)
 
 --====================================================================================================
---HANDLERS
+--GUI EVENTS
 --====================================================================================================
-ei_update_step = 0  -- Tracks which entity type is updated next, skips first tick
-ei_update_functions = {
-    function() ei_powered_beacon.update() end, --1
-    function() ei_powered_beacon.update_fluid_storages() end, --2
-    function() ei_neutron_collector.update() end, --3
-    function() ei_matter_stabilizer.update() end, --4
-    function() orbital_combinator.update() end, --5
-    function() ei_fueler.updater() end, --6
-    function() ei_gate.update() end, --7
-    function() em_trains.check_buffs() end,
-    function() em_trains.train_updater() end,--8
-    function() em_trains.charger_updater() end,--9
-}
---60/9=x6.66 (rounded up to 7) executions/handler/second, ie 7 rounds of 10 updates per 60ticks (default, customizable update length 9-6000 ticks)
-ei_ticksPerFullUpdate = settings.startup["ei_ticks_per_full_update"].value -- How many ticks to spread updates over
-local divisor = ei_ticksPerFullUpdate /  ei_lib.getn(ei_update_functions) -- How many times each entity updater is called per cycle
-ei_maxEntityUpdates = settings.startup["ei-max_updates_per_tick"].value -- Ceiling on entity updates per tick
-ei_update_functions_length = ei_lib.getn(ei_update_functions)
-local divisor = ei_ticksPerFullUpdate /  ei_update_functions_length -- How many times each entity updater is called per cycle
-function updater()
-  local updates_needed = 1
-   -- Hardcoded checks against ei_update_step are quick
-   -- Whichever is less: max_updates_per_tick OR total of entities divided by the number of execution cycles
-   if ei_update_step < 5 then -- Reduces the average number of `if` checks
---        if ei_update_step == 0 then
---            ei_global.check_init()
---            ei_update_step = 1
---            end
-       if ei_update_step == 1 then
-           if storage.ei and storage.ei.spaced_updates and storage.ei.spaced_updates > 0 then
-               updates_needed = math.max(1,math.min(math.ceil(storage.ei.spaced_updates / divisor), ei_maxEntityUpdates))
-               end
-           for i = 1, updates_needed do
-               --Abort loop if the queue changes to avoid null reference
-               if storage.ei and storage.ei.spaced_updates and
-               math.max(1,math.min(math.ceil(storage.ei.spaced_updates / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_powered_beacon.update()
-           end
 
-       elseif ei_update_step == 2 then
-           if storage.ei and storage.ei.spaced_updates and storage.ei.spaced_updates > 0 then
-               updates_needed = math.max(1,math.min(math.ceil(storage.ei.spaced_updates / divisor), ei_maxEntityUpdates))
-               end
-           updates_needed = math.min(math.ceil(storage.ei.spaced_updates / divisor), ei_maxEntityUpdates)
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei.spaced_updates and
-               math.max(1,math.min(math.ceil(storage.ei.spaced_updates / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_powered_beacon.update_fluid_storages()
-           end
-
-       elseif ei_update_step == 3 then
-           if storage.ei and storage.ei["neutron_sources"] and  ei_lib.getn(storage.ei["neutron_sources"]) then
-               updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei["neutron_sources"]) / divisor), ei_maxEntityUpdates))
-               end
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei["neutron_sources"] and
-               math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei["neutron_sources"]) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_neutron_collector.update()
-           end
-
-       elseif ei_update_step == 4 then
-           if storage.ei and storage.ei.matter_machines and #storage.ei.matter_machines then
-               updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.matter_machines) / divisor), ei_maxEntityUpdates))
-               end
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei.matter_machines and
-               math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.matter_machines) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_matter_stabilizer.update()
-           end
-       end
-
-   else -- Otherwise, ei_update_step is >= 5
-
-       if ei_update_step == 5 then
-           if storage.ei and storage.ei.orbital_combinators and  ei_lib.getn(storage.ei.orbital_combinators) then
-                updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.orbital_combinators) / divisor), ei_maxEntityUpdates))
-                end
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei.orbital_combinators and
-               math.max(1,math.min(math.ceil(ei_lib.getn(storage.ei.orbital_combinators) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               orbital_combinator.update()
-           end
-
-       elseif ei_update_step == 6 then
-           if storage.ei and storage.ei.fueler_queue and #storage.ei.fueler_queue then
-               updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.fueler_queue) / divisor), ei_maxEntityUpdates))
-               end
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei.fueler_queue and
-               math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.fueler_queue) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_fueler.updater()
-           end
-
-       elseif ei_update_step == 7 then
-           if storage.ei and storage.ei.gate and storage.ei.gate.gate and  ei_lib.getn(storage.ei.gate.gate) then
-                updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.gate.gate) / divisor), ei_maxEntityUpdates))
-                end
-           for i = 1, updates_needed do
-               if storage.ei and storage.ei.gate and storage.ei.gate.gate and
-               math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei.gate.gate) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               ei_gate.update()
-           end
-
-       elseif ei_update_step == 8 then
-           em_trains.check_global()
-
-           if storage.ei_emt and storage.ei_emt.trains and ei_lib.getn(storage.ei_emt.trains) then
-                updates_needed = math.max(1,math.min(math.ceil(ei_lib.getn(storage.ei_emt.trains) / divisor), ei_maxEntityUpdates))
-                end
-           for i = 1, updates_needed do
-               if storage.ei_emt and storage.ei_emt.trains and
-               math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei_emt.trains) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               if not em_trains.train_updater() then -- only try once if nil
-                   goto skip
-                   end
-           end
-       elseif ei_update_step == 9 then
-           em_trains.check_global()
-           if storage.ei_emt and storage.ei_emt.chargers and  ei_lib.getn(storage.ei_emt.chargers) then
-                updates_needed = math.max(1,math.min(math.ceil( ei_lib.getn(storage.ei_emt.chargers) / divisor), ei_maxEntityUpdates))
-                end
-           for i = 1, updates_needed do
-               if storage.ei_emt and storage.ei_emt.chargers and
-               math.max(1,math.min(math.ceil(ei_lib.getn(storage.ei_emt.chargers) / divisor), ei_maxEntityUpdates)) ~= updates_needed then
-                   goto skip
-                   end
-               if not em_trains.charger_updater() then -- only try once if nil
-                   goto skip
-                   end
-           end
-       end
-   end
-    ::skip::
-    em_trains_gui.updater()
-   -- Increment ei_update_step and loop back to 1 if needed
-   ei_update_step = ei_update_step + 1
-   if ei_update_step > #ei_update_functions then
-   if ei_update_step > ei_update_functions_length then --lol faster
-       ei_update_step = 1
-   end
-
-   -- Essential updates that run every tick (e.g., timers, global effects)
-   ei_alien_spawner.update()
-   ei_gaia.update()
-   ei_induction_matrix.update()
-   ei_black_hole.update()
-   end
-end
-
---Check global once per entity updater cycle
-local globalCheckTicks = ei_ticksPerFullUpdate
-script.on_nth_tick(globalCheckTicks, function(event)
-    ei_global.check_init()
-    em_trains.check_buffs()
-end)
-
---[[
-function spaced_updater()
-    ei_global.check_init()
-    ei_gate.update()
-end
-
--- Run fueler updates every 10 ticks
-script.on_nth_tick(10, function()
-  ei_fueler.updater()
-end)
-
--- Run trains updates every 60 ticks
-script.on_nth_tick(60, function()
-  em_trains_charger.updater()
-  em_trains_gui.updater()
-  ei_gaia.update()
-  ei_alien_spawner.update()
-end)
-]]
-function on_built_entity(e)
-    if not e["entity"] then
-      return
-    end
-
-    if not e["entity"].valid then
-      return
-    end
-
-    if ei_powered_beacon.counts_for_fluid_handling(e["entity"]) then
-        ei_register.register_fluid_entity(e["entity"])
-    end
-
-    if e["entity"].name == "ei-copper-beacon" then
-        local master_unit = ei_register.register_master_entity("copper_beacon", e["entity"])
-        local slave_entity = ei_register.make_slave("copper_beacon", master_unit, "ei-copper-beacon_slave", {x = 0,y = 0})
-        ei_register.link_slave("copper_beacon", master_unit, slave_entity, "slave_assembler")
-        ei_register.init_beacon("copper_beacon", master_unit)
-        ei_register.add_spaced_update()
-        ei_beacon_overload.on_built_entity(e["entity"])
-    end
-
-    if e["entity"].name == "ei-iron-beacon" then
-        local master_unit = ei_register.register_master_entity("copper_beacon", e["entity"])
-        local slave_entity = ei_register.make_slave("copper_beacon", master_unit, "ei-iron-beacon_slave", {x = 0,y = 0})
-        ei_register.link_slave("copper_beacon", master_unit, slave_entity, "slave_assembler")
-        ei_register.init_beacon("copper_beacon", master_unit)
-        ei_register.add_spaced_update()
-        ei_beacon_overload.on_built_entity(e["entity"])
-    end
-
---    ei_beacon_overload.on_built_entity(e["entity"])
-    ei_neutron_collector.on_built_entity(e["entity"])
-    ei_fusion_reactor.on_built_entity(e["entity"])
-    ei_matter_stabilizer.on_built_entity(e["entity"])
-    ei_induction_matrix.on_built_entity(e["entity"])
-    ei_black_hole.on_built_entity(e["entity"])
-    ei_gate.on_built_entity(e["entity"])
-    ei_alien_system.on_built_entity(e["entity"])
-    ei_gaia.on_built_entity(e["entity"])
-    ei_loaders_lib.on_built_entity(e["entity"])
-    ei_fueler.on_built_entity(e["entity"])
-    em_trains.on_built_entity(e["entity"])
-    orbital_combinator.add(e["entity"])
-end
-
-
-function on_built_tile(e)
-    ei_induction_matrix.on_built_tile(e)
-end
-
-
-function on_destroyed_entity(e)
-    if not e["entity"] then
+script.on_event(defines.events.on_gui_opened, function(event)
+    local name = event.entity and event.entity.name
+    if not name then
         return
     end
 
-    if not e["entity"].valid then
-      return
+    local player = game.get_player(event.player_index)
+
+    if name == "ei-fusion-reactor" then
+        ei_fusion_reactor.open_gui(player)
+    elseif ei_induction_matrix.core[name] then
+        ei_induction_matrix.open_gui(player)
+    elseif name == "ei-black-hole" then
+        ei_black_hole.open_gui(player)
+    elseif name == "ei-gate-container" then
+        ei_gate.open_gui(player)
+    elseif name == "ei-fueler" then
+        ei_fueler.open_gui(player)
+    elseif ei_radio_station.STATIONS[name] then
+        ei_radio_station.open_gui(player, event.entity)
+    elseif name == ei_drone_port.PORT then
+        ei_drone_port.open_gui(player, event.entity)
+    elseif name == ei_alien_console.NAME then
+        ei_alien_console.open_gui(player, event.entity)
+    end
+end)
+
+script.on_event(defines.events.on_gui_closed, function(event)
+    local name = event.entity and event.entity.name
+    local element_name = event.element and event.element.valid and event.element.name
+    local player = game.get_player(event.player_index)
+
+    if name == "ei-fusion-reactor" then
+        ei_fusion_reactor.close_gui(player)
+    elseif element_name == "ei-induction-matrix-console" then
+        ei_induction_matrix.close_gui(player)
+    elseif name == "ei-black-hole" then
+        ei_black_hole.close_gui(player)
+    elseif name == "ei-gate-container" then
+        ei_gate.close_gui(player)
+    elseif name == "ei-fueler" then
+        ei_fueler.close_gui(player)
+    elseif ei_radio_station.STATIONS[name] then
+        ei_radio_station.close_gui(player)
+    elseif name == ei_drone_port.PORT then
+        ei_drone_port.close_gui(player)
+    elseif name == ei_alien_console.NAME then
+        ei_alien_console.close_gui(player)
+    end
+end)
+
+-- parent_gui tag -> click handler
+local CLICK_HANDLERS = {
+    ["ei-fusion-reactor-console"] = function(event) ei_fusion_reactor.on_gui_click(event) end,
+    ["ei-induction-matrix-console"] = function(event) ei_induction_matrix.on_gui_click(event) end,
+    ["ei-black-hole-console"] = function(event) ei_black_hole.on_gui_click(event) end,
+    ["ei-gate-console"] = function(event) ei_gate.on_gui_click(event) end,
+    ["ei-alien-gui"] = function(event) ei_alien_system.on_gui_click(event) end,
+    ["ei-drone-port-console"] = function(event) ei_drone_port.on_gui_click(event) end,
+    ["ei-alien-console-gui"] = function(event) ei_alien_console.on_gui_click(event) end,
+    ["ei-fueler-console"] = function(event) ei_fueler.on_gui_click(event) end,
+    ["mod_gui"] = function(event) em_trains_gui.on_gui_click(event) end,
+    ["em_trains_mod-gui"] = function(event) em_trains_gui.on_gui_click(event) end,
+    ["ei-mod-gui"] = function(event) em_trains_gui.on_gui_click(event) end,
+}
+
+script.on_event(defines.events.on_gui_click, function(event)
+    local element = event.element
+    if not (element and element.valid) then
+        return
     end
 
-    if e["robot"] or e["player_index"] then
-        e["destroy_type"] = "pre"
-    else
-        e["destroy_type"] = "past"
+    local tags = element.tags
+    if not tags.parent_gui then
+        return
     end
 
-    local transfer = nil or e["robot"] or e["player_index"]
-
-    if ei_powered_beacon.counts_for_fluid_handling(e["entity"]) then
-        ei_register.deregister_fluid_entity(e["entity"])
-    end
-
-    if e["entity"].name == "ei-copper-beacon" then
-        local master_unit = e["entity"].unit_number
-        if not storage.ei.copper_beacon.master[master_unit] then
-            goto continue
+    -- "open informatron page" buttons exist in several consoles
+    if tags.action == "goto-informatron" then
+        if remote.interfaces["informatron"] then
+            remote.call("informatron", "informatron_open_to_page", {
+                player_index = event.player_index,
+                interface = tags.interface or "exotic-industries-informatron",
+                page_name = tags.page,
+            })
         end
-        local slave_entity = storage.ei.copper_beacon.master[master_unit].slaves.slave_assembler
-        ei_register.unregister_slave_entity("copper_beacon", slave_entity ,e["entity"], true)
-        ei_register.unregister_master_entity("copper_beacon", master_unit)
-        ei_register.subtract_spaced_update()
-        ::continue::
+        return
     end
 
-    if e["entity"].name == "ei-iron-beacon" then
-        local master_unit = e["entity"].unit_number
-        if not storage.ei.copper_beacon.master[master_unit] then
-            goto continue
-        end
-        local slave_entity = storage.ei.copper_beacon.master[master_unit].slaves.slave_assembler
-        ei_register.unregister_slave_entity("copper_beacon", slave_entity ,e["entity"], true)
-        ei_register.unregister_master_entity("copper_beacon", master_unit)
-        ei_register.subtract_spaced_update()
-        ::continue::
+    local handler = CLICK_HANDLERS[tags.parent_gui]
+    if handler then
+        handler(event)
     end
+end)
 
-    ei_beacon_overload.on_destroyed_entity(e["entity"], e["destroy_type"])
-    ei_neutron_collector.on_destroyed_entity(e["entity"], e["destroy_type"])
-    ei_alien_spawner.on_destroyed_entity(e["entity"])
-    ei_matter_stabilizer.on_destroyed_entity(e["entity"])
-    ei_induction_matrix.on_destroyed_entity(e["entity"])
-    ei_black_hole.on_destroyed_entity(e["entity"], transfer)
-    ei_gate.on_destroyed_entity(e["entity"], transfer)
-    ei_fueler.on_destroyed_entity(e["entity"], transfer)
-    em_trains.on_destroyed_entity(e["entity"])
-    orbital_combinator.rem(e["entity"])
-end
+script.on_event(defines.events.on_gui_value_changed, function(event)
+    if event.element.tags.parent_gui == "ei-fusion-reactor-console" then
+        ei_fusion_reactor.on_gui_value_changed(event)
+    end
+end)
 
+script.on_event(defines.events.on_gui_elem_changed, function(event)
+    local parent_gui = event.element.tags.parent_gui
+    if parent_gui == "ei-radio-station-console" then
+        ei_radio_station.on_gui_elem_changed(event)
+    elseif parent_gui == "ei-drone-port-console" then
+        ei_drone_port.on_gui_elem_changed(event)
+    end
+end)
 
-function on_destroyed_tile(e)
-    ei_induction_matrix.on_destroyed_tile(e)
-end
+script.on_event(defines.events.on_gui_switch_state_changed, function(event)
+    if event.element.tags.parent_gui == "ei-radio-station-console" then
+        ei_radio_station.on_gui_switch_state_changed(event)
+    end
+end)
+
+script.on_event(defines.events.on_entity_settings_pasted, function(event)
+    ei_radio_station.on_entity_settings_pasted(event)
+end)
+
+script.on_event(defines.events.on_gui_selection_state_changed, function(event)
+    local parent_gui = event.element.tags.parent_gui
+    if parent_gui == "ei-gate-console" then
+        ei_gate.on_gui_selection_state_changed(event)
+    elseif parent_gui == "ei-drone-port-console" then
+        ei_drone_port.on_gui_selection_state_changed(event)
+    end
+end)

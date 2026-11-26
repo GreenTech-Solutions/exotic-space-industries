@@ -3,17 +3,41 @@
 -- TODO: add recursive age inclusion
 
 local ei_data = require("lib/data")
-function endswith(str,suf) return str:sub(-string.len(suf)) == suf end
-function startswith(text, prefix) return text:find(prefix, 1, true) == 1 end
-function contains(s, word) return tostring(s):find(word, 1, true) ~= nil end
+local ei_lib = require("lib/lib")
 
 --====================================================================================================
 --UTIL
 --====================================================================================================
 
+---Returns a copy of `list` without duplicate values (keeps the first occurrence).
+local function unique_list(list)
+    local seen = {}
+    local result = {}
+    for _, value in ipairs(list) do
+        if not seen[value] then
+            seen[value] = true
+            table.insert(result, value)
+        end
+    end
+    return result
+end
+
+---Returns a copy of a science pack list without duplicate packs (keeps the first occurrence).
+local function unique_ingredients(ingredients)
+    local seen = {}
+    local result = {}
+    for _, ingredient in ipairs(ingredients) do
+        local name = ingredient[1] or ingredient.name
+        if name and not seen[name] then
+            seen[name] = true
+            table.insert(result, ingredient)
+        end
+    end
+    return result
+end
+
 local function is_exoplanetary_science(pack)
   if string.sub(pack, 1, 3) == "ei-" then return false end
-  if string.sub(pack, 1, 3) == "ei_" then return false end
   if not ei_data.science_dict[pack] then return true end
   return false
 end
@@ -77,35 +101,106 @@ end
 
 
 
-local function get_ages(tech)
+-- get_ages state (data stage only):
+--   age_cache   tech name -> ages of a non-root tech (memoization, also avoids exponential walks)
+--   age_active  tech name -> its index in age_path while it is being resolved (cycle detection)
+--   age_path    current prerequisite chain (for the cycle log)
+local age_cache, age_active, age_path = {}, {}, {}
+local logged_cycles = {}
+
+-- make sure every tech has its name set to its id
+for i,tech in pairs(data.raw.technology) do
+    if not tech.name then
+        tech.name = i
+    elseif tech.name ~= i then
+        tech.name = i
+    end
+end
+
+-- Depth guard (safety net for extremely deep but acyclic trees)
+local age_depth = 0
+local age_max_depth = 400
+local age_logged_depth = false
+
+---Returns all ages a technology belongs to (its own age or the ages of its prerequisites).
+---Prerequisite cycles (usually two mods depending on each other's technologies) no longer
+---overflow the stack: the chain is written to factorio-current.log once and cut there.
+---(3.2.0, based on a player patch)
+---@param tech table technology prototype
+---@param is_root boolean|nil true for the technology whose age is being determined
+local function get_ages(tech, is_root)
     if not tech then return {} end
-    
-    -- if tech unlocks an age tech pack, give the age corresponding to the tech pack
-    if ei_data.tech_ages_with_sub[tech.name] then
-        return {ei_data.tech_ages_with_sub[tech.name]}
-    end
 
-    if tech.age then
-        return {tech.age}
-    end
-
-    if not tech.prerequisites then
+    age_depth = age_depth + 1
+    if age_depth > age_max_depth then
+        if not age_logged_depth then
+            age_logged_depth = true
+            local path = {}
+            for i = 1, #age_path do
+                table.insert(path, age_path[i])
+            end
+            table.insert(path, tostring(tech.name))
+            log("[exotic-space-industries] WARNING: recursive tech depth exceeded " ..
+                age_max_depth .. ":\n    " ..
+                table.concat(path, "\n -> "))
+        end
+        age_depth = age_depth - 1
         return {}
     end
 
-    local return_ages = {}
-    
-    for i,v in ipairs(tech.prerequisites) do
-        local ages = get_ages(data.raw.technology[v])
-        if ages then
-            for x,y in ipairs(ages) do
-                table.insert(return_ages, y)
+    if not is_root and age_cache[tech.name] then
+        age_depth = age_depth - 1
+        return age_cache[tech.name]
+    end
+
+    -- cycle: log the chain (once per entry point) and stop descending
+    local start = age_active[tech.name]
+    if start then
+        local cycle = {}
+        for i = start, #age_path do
+            table.insert(cycle, age_path[i])
+        end
+        table.insert(cycle, tech.name)
+        local text = table.concat(cycle, " -> ")
+        if not logged_cycles[text] then
+            logged_cycles[text] = true
+            log("[exotic-space-industries] WARNING: technology prerequisite cycle (please report it to the mods involved):\n    " .. text)
+        end
+        age_depth = age_depth - 1
+        return tech.age and {tech.age} or {}
+    end
+
+    age_active[tech.name] = #age_path + 1
+    table.insert(age_path, tech.name)
+
+    local result
+    -- A tech that unlocks an age tech pack gives that age to the techs depending on it.
+    -- The unlocking tech itself must NOT get that age: it would need the pack it unlocks
+    -- (e.g. "kr-imersium-processing" requiring the imersite tech pack it unlocks).
+    if not is_root and ei_data.tech_ages_with_sub[tech.name] then
+        result = {ei_data.tech_ages_with_sub[tech.name]}
+    elseif tech.age then
+        result = {tech.age}
+    else
+        result = {}
+        local seen_age = {}
+        for _, prerequisite in ipairs(tech.prerequisites or {}) do
+            for _, age in ipairs(get_ages(data.raw.technology[prerequisite])) do
+                if not seen_age[age] then
+                    seen_age[age] = true
+                    table.insert(result, age)
+                end
             end
         end
     end
 
-    return return_ages
-
+    table.remove(age_path)
+    age_active[tech.name] = nil
+    if not is_root then
+        age_cache[tech.name] = result
+    end
+    age_depth = age_depth - 1
+    return result
 end
 
 
@@ -156,24 +251,14 @@ local exclude = {
 
 local exclude_list = ei_data.tech_exclude_list
 
-for i,v in pairs(data.raw.technology) do
-
-    for j,ex in ipairs(exclude_list) do
-        if j == i then
-            goto continue
-        end
-    end
-
-    if data.raw.technology[i].prerequisites then
-        for x,y in ipairs(data.raw.technology[i].prerequisites) do
-            if tech_swap_dict[y] then
-                data.raw.technology[i].prerequisites[x] = tech_swap_dict[y]
+for _, technology in pairs(data.raw.technology) do
+    if technology.prerequisites then
+        for x, prerequisite in ipairs(technology.prerequisites) do
+            if tech_swap_dict[prerequisite] then
+                technology.prerequisites[x] = tech_swap_dict[prerequisite]
             end
         end
     end
-
-    ::continue::
-
 end
 
 -- loop over all techs and get the one that dont start with "ei-"
@@ -183,7 +268,6 @@ end
 
 for i,tech in pairs(data.raw.technology) do
     if string.sub(i, 1, 3) == "ei-" then goto continue end
-    if string.sub(i, 1, 3) == "ei_" then goto continue end
 
     -- if tech has age skip
     if tech.age then
@@ -196,7 +280,7 @@ for i,tech in pairs(data.raw.technology) do
     end
 
     -- get possible ages
-    local ages = get_ages(tech)
+    local ages = get_ages(tech, true)
 
     -- get highest age
     local highest_age = get_highest_age(ages)
@@ -216,22 +300,11 @@ for i,tech in pairs(data.raw.technology) do
         goto continue
     end
 
-    local to_remove = {}
-
-    -- loop over all prerequisits and remove excluded techs
-    for id,prereq in ipairs(tech.prerequisites) do
-        
-        for _,ex in ipairs(exclude_list) do
-            if prereq == ex then
-                table.insert(to_remove, id)
-            end
+    -- remove excluded techs (backwards, so removing does not shift the remaining indices)
+    for id = #tech.prerequisites, 1, -1 do
+        if ei_lib.table_contains_value(exclude_list, tech.prerequisites[id]) then
+            table.remove(tech.prerequisites, id)
         end
-
-    end
-
-    -- remove excluded techs
-    for _,id in ipairs(to_remove) do
-        table.remove(tech.prerequisites, id)
     end
 
     ::continue::
@@ -282,13 +355,11 @@ end
 
 for i,v in pairs(data.raw.technology) do
     if string.sub(i, 1, 3) == "se-" then goto continue end
-    -- if string.sub(i, 1, 3) == "kr-" then goto continue end
-    if data.raw.technology[i].unit and data.raw.technology[i].unit.ingredients then
-        -- check if tech contains vanilla science pack
-        for x,y in ipairs(data.raw.technology[i].unit.ingredients) do
-            if ei_data.science_dict[y[1]] then
-                -- remove vanilla science pack
-                table.remove(data.raw.technology[i].unit.ingredients, x)
+    if v.unit and v.unit.ingredients then
+        local ingredients = v.unit.ingredients
+        for x = #ingredients, 1, -1 do
+            if ei_data.science_dict[ingredients[x][1]] then
+                table.remove(ingredients, x)
             end
         end
     end
@@ -299,63 +370,12 @@ end
 -- also fixup order and number of tech icons
 for i,v in pairs(data.raw.technology) do
     -- prereqs
-    if data.raw.technology[i].prerequisites then
-        local prerequisits = {}
-        for x,y in ipairs(data.raw.technology[i].prerequisites) do
-            if prerequisits[y] then
-                table.remove(data.raw.technology[i].prerequisites, x)
-            else
-                prerequisits[y] = true
-            end
-        end
+    if v.prerequisites then
+        v.prerequisites = unique_list(v.prerequisites)
     end
 
-    if data.raw.technology[i].unit then
-      if data.raw.technology[i].unit.ingredients then
-        local ingredients = {}
-        for x,y in ipairs(data.raw.technology[i].unit.ingredients) do
-          if not y[1] then error(serpent.block(y)) end
-          if ingredients[y[1]] then
-            table.remove(data.raw.technology[i].unit.ingredients, x)
-          else
-            ingredients[y[1]] = true
-          end
-        end
-        -- error(serpent.block(data.raw.technology[i].unit.ingredients))
-      end
-    end
-
-    -- icons
-    if data.raw.technology[i].age then
-
-        local effects = util.table.deepcopy(data.raw.technology[i].effects)
-        local icon_found = false
-
-        if not effects then goto continue end
-
-        local id = 1
-        while true do
-            if not effects[id] then
-                break
-            end
-
-            local y = effects[id]
-            if y.type == "nothing" then
-                if y.icon == ei_graphics_other_path.."tech_overlay.png" then
-                    table.remove(effects, id)
-                    icon_found = true
-                    id = 1
-                end
-            end
-
-            id = id + 1
-
-        end
-
-        data.raw.technology[i].effects = effects
-
-        ::continue::
-        
+    if v.unit and v.unit.ingredients then
+        v.unit.ingredients = unique_ingredients(v.unit.ingredients)
     end
 end
 
@@ -379,10 +399,6 @@ for tech_id,_ in pairs(data.raw.technology) do
 
     local tech = data.raw.technology[tech_id]
 
-    -- skip techs that end with :dummy
-    if string.sub(tech_id, -6) == "-dummy" then
-        goto continue
-    end
     if tech_id == "ei-temp" then
         goto continue
     end
@@ -468,29 +484,26 @@ end
 for i,v in pairs(data.raw.technology) do
   
   if ei_lib.config("no-tech-scaling") then
+
     if data.raw.technology[i].unit then
       if data.raw.technology[i].unit.count and data.raw.technology[i].unit.ingredients then
         data.raw.technology[i].unit.count = 100 * #data.raw.technology[i].unit.ingredients
       end
     end
+
+    if not data.raw.technology[i].count_formula and not data.raw.technology[i].unit then 
+      data.raw.technology[i].unit = {count = 1, ingredients = {}, time = 1}
+    end
+
   end
 
-  if is_exoplanetary_tech(i) then 
-    -- error(serpent.block(data.raw.technology[i].unit.ingredients))
-
-    for x,y in ipairs(data.raw.technology[i].unit.ingredients) do
-      if ei_data.science_dict_obsolete[y[1]] then
-        table.remove(data.raw.technology[i].unit.ingredients, x)
+  if is_exoplanetary_tech(i) and ei_lib.config('debloat') then
+    local ingredients = data.raw.technology[i].unit.ingredients
+    for x = #ingredients, 1, -1 do
+      if ei_data.science_dict_obsolete[ingredients[x][1]] then
+        table.remove(ingredients, x)
       end
     end
-
-    for x,y in ipairs(data.raw.technology[i].unit.ingredients) do
-      if ei_data.science_dict_obsolete[y[1]] then
-        table.remove(data.raw.technology[i].unit.ingredients, x)
-      end
-    end
-
-    -- error(serpent.block(data.raw.technology[i].unit.ingredients))
   end
 end
 
@@ -499,40 +512,20 @@ end
 
 for tech_id,_ in pairs(data.raw.technology) do
   local tech = data.raw.technology[tech_id]
-  if string.sub(tech_id, -6) == "-dummy" then goto continue end
   if string.sub(tech_id, 1, 3) == "ei-" then goto continue end
-  if string.sub(tech_id, 1, 3) == "ei_" then goto continue end
   if tech_id == "ei-temp" then goto continue end
   -- if not tech.prerequisites then goto continue end
   -- if #tech.prerequisites == 0 then goto continue end
   if not tech.unit then goto continue end
   if not tech.unit.ingredients then goto continue end
   
-  for index,ingredient in pairs(tech.unit.ingredients) do 
-    if data.raw.tool[ingredient[1]] then
-      if data.raw.tool[ingredient[1]].hidden then
-        table.remove(tech.unit.ingredients,index)
-      elseif ei_data.science_dict[ingredient[1]] then
-        table.remove(tech.unit.ingredients,index)
-      end
+  for index = #tech.unit.ingredients, 1, -1 do
+    local pack = tech.unit.ingredients[index][1]
+    local pack_prototype = (data.raw.item and data.raw.item[pack]) or (data.raw.tool and data.raw.tool[pack])
+    if pack_prototype and (pack_prototype.hidden or ei_data.science_dict[pack]) then
+      table.remove(tech.unit.ingredients, index)
     end
   end
-  
-  -- for index,prereq in ipairs(tech.prerequisites) do
-
-      -- local prereq_tech = data.raw.technology[prereq]
-
-      -- if not prereq_tech then
-        -- goto skip
-      -- end
-
-      -- if string.sub(prereq, 1, 3) == "ei-" then
-        -- table.remove(tech.prerequisites, index)
-      -- end
-
-      -- ::skip::
-
-  -- end
 
   ::continue::
 
@@ -564,21 +557,8 @@ for i,v in pairs(data.raw.technology) do
     end
   end
 
-  if data.raw.technology[i].unit then
-    if data.raw.technology[i].unit.ingredients then
-      for z = 0, #data.raw.technology[i].unit.ingredients do
-        local ingredients = {}
-        for x,y in ipairs(data.raw.technology[i].unit.ingredients) do
-          -- error(y[1])
-          if ingredients[y[1]] then
-            table.remove(data.raw.technology[i].unit.ingredients, x)
-          else
-            ingredients[y[1]] = true
-          end
-        end
-      end
-      -- error(serpent.block(data.raw.technology[i].unit.ingredients))
-    end
+  if data.raw.technology[i].unit and data.raw.technology[i].unit.ingredients then
+    data.raw.technology[i].unit.ingredients = unique_ingredients(data.raw.technology[i].unit.ingredients)
   end
 end
 
@@ -614,9 +594,4 @@ ei_lib.remove_tech("steam-power")
 ei_lib.remove_tech("wdm_ship_fix_lock")
 
 ei_lib.remove_tech("ei-temp")
-ei_lib.remove_tech("ei-steam-age-dummy")
-ei_lib.remove_tech("ei-electricity-age-dummy")
-ei_lib.remove_tech("ei-computer-age-dummy")
-ei_lib.remove_tech("ei-quantum-age-dummy")
-ei_lib.remove_tech("ei-exotic-age-dummy")
 

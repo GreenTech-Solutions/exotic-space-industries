@@ -70,7 +70,7 @@ ei_lib.recipe_new("heavy-oil-cracking",
 })
 
 -- make engine recipe in recipe-category crafting
-data.raw["recipe"]["engine-unit"].category = "crafting"
+data.raw["recipe"]["engine-unit"].categories = {"crafting"}
 
 -- reduce craft time of engines and electric engines
 data.raw["recipe"]["engine-unit"].energy_required = 4
@@ -85,7 +85,6 @@ local new_prerequisites_table = {}
 new_prerequisites_table["steam-age"] = {
     {"flammables", "ei-steam-oil-processing"},
     {"automated-rail-transportation", "ei-steam-basic-train"},
-    {"rail-signals", "ei-steam-basic-train"},
     {"braking-force-1", "ei-steam-basic-train"},
     {"steel-processing", "ei-steam-crusher"},
     {"engine", "ei-steam-oil-processing"},
@@ -128,7 +127,7 @@ new_prerequisites_table["quantum-age"] = {
 
 }
 
-numbered_buffs = {
+local numbered_buffs = {
     "stronger-explosives-7",
     "research-speed-6",
     "worker-robots-speed-6",
@@ -145,7 +144,7 @@ numbered_buffs = {
 
 local prereqs_to_remove = {}
 
-function make_numbered_buff_prerequisite(tech)
+local function make_numbered_buff_prerequisite(tech)
 
     -- get last char of tech name as number
     local tech_number = tonumber(string.sub(tech, -1))
@@ -337,7 +336,7 @@ data.raw["pump"]["pump"].energy_source = {
 data.raw["inserter"]["burner-inserter"].allow_burner_leech = true
 
 -- make electric engine unit craft category be crafting
--- data.raw["recipe"]["electric-engine-unit"].category = "crafting"
+-- data.raw["recipe"]["electric-engine-unit"].categories = {"crafting"}
 
 -- make underground pipes longer, read from setting
 data.raw["pipe-to-ground"]["pipe-to-ground"].fluid_box.pipe_connections = {
@@ -520,8 +519,8 @@ data.raw["splitter"]["express-splitter"].next_upgrade = "ei-neo-splitter"
 data.raw["underground-belt"]["express-underground-belt"].next_upgrade = "ei-neo-underground-belt"
 
 -- set localised descriptions
-data.raw["item"]["burner-inserter"].localised_description = {"item-description.ei_burner-inserter"}
-data.raw["item"]["oil-refinery"].localised_description = {"item-description.ei_oil-refinery"}
+data.raw["item"]["burner-inserter"].localised_description = {"item-description.ei-burner-inserter"}
+data.raw["item"]["oil-refinery"].localised_description = {"item-description.ei-oil-refinery"}
 
 --====================================================================================================
 --FUNCTION STUFF

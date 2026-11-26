@@ -10,40 +10,13 @@ local ei_data = require("lib/data")
 ------------------------------------------------------------------------------------------------------
 
 data:extend({
-    {
-        name = "ei-black-hole-data",
-        type = "item",
-        icon = ei_graphics_item_path.."black-hole-data.png",
-        icon_size = 128,
-        subgroup = "ei-refining-tech",
-        order = "c-a",
-        stack_size = 200,
-        pictures = {
-            layers =
-            {
-              {
-                size = 128,
-                filename = ei_graphics_item_path.."black-hole-data.png",
-                scale = 0.25/2
-              },
-              {
-                draw_as_light = true,
-                flags = {"light"},
-                size = 128,
-                filename = ei_graphics_item_path.."space-data_light.png",
-                scale = 0.25/2
-              }
-            }
-          },
-    },
 
     {
         name = "ei-black-hole-exotic-age-tech",
-        type = "tool",
+        type = "item",
         icon = ei_graphics_item_path.."black-hole-exotic-age-tech.png",
         icon_size = 64,
         stack_size = 200,
-        durability = 1,
         subgroup = "science-pack",
         order = "a7",
         pictures = {
@@ -74,7 +47,7 @@ data:extend({
     {
         name = "ei-black-hole-exotic-age-tech",
         type = "recipe",
-        category = "ei-nano-factory",
+        categories = {"ei-nano-factory"},
         energy_required = 240,
         ingredients = {
             {type = "item", name = "ei-clean-plating", amount = 20},
@@ -113,11 +86,10 @@ data:extend({
 
   {
     name = "ei-black-hole-exotic-age-tech",
-    type = "tool",
+    type = "item",
     icon = ei_graphics_item_path.."black-hole-exotic-age-tech.png",
     icon_size = 64,
     stack_size = 200,
-    durability = 1,
     subgroup = "science-pack",
     order = "a7",
     pictures = {
@@ -142,7 +114,7 @@ data:extend({
   {
     name = "ei-crushed-promethium-asteroid-chunk",
     type = "recipe",
-    category = "ei-crushing",
+    categories = {"ei-crushing"},
     energy_required = 20,
     ingredients = {
         {type="item", name="promethium-asteroid-chunk", amount=1},
@@ -158,14 +130,14 @@ data:extend({
   {
       name = "ei-exotic-matter",
       type = "recipe",
-      category = "centrifuging",
+      categories = {"centrifuging"},
       energy_required = 1,
       ingredients = {
           {type = "item", name = "ei-exotic-ore", amount = 1},
       },
       results = {
-          {type = "item", name = "ei-exotic-matter-up", amount = 1, probability = 0.5},
-          {type = "item", name = "ei-exotic-matter-down", amount = 1, probability = 0.5},
+          {type = "item", name = "ei-exotic-matter-up", amount = 1, independent_probability = 0.5},
+          {type = "item", name = "ei-exotic-matter-down", amount = 1, independent_probability = 0.5},
       },
       always_show_made_in = true,
       enabled = false,

@@ -47,10 +47,24 @@ local mod_entity_base = {
 
 local entity_base = table.deepcopy(data.raw["logistic-container"]["buffer-chest"])
 entity_base['picture'] = mod_entity_base['picture']
-entity_base['animation'] = mod_entity_base['picture']
+-- Factorio 2.1 moved logistic-container robot interaction visuals into robot_door.
+entity_base.robot_door = entity_base.robot_door or {}
+entity_base.robot_door.animation = mod_entity_base['picture']
+for old_key, new_key in pairs({
+    landing_location_offset = "location_offset",
+    opened_duration = "opened_duration",
+    animation_sound = "animation_sound",
+}) do
+    if entity_base[old_key] ~= nil then
+        entity_base.robot_door[new_key] = entity_base[old_key]
+        entity_base[old_key] = nil
+    end
+end
+entity_base.animation = nil
 entity_base['name'] = mod_entity_base['name']
 entity_base['minable'] = mod_entity_base['minable']
 entity_base['inventory_size'] = mod_entity_base['inventory_size']
+entity_base['next_upgrade'] = nil
 
 local item_base = {
     name = "ei-1x1-container",
@@ -66,7 +80,7 @@ local item_base = {
 local recipe_base = {
     name = "ei-1x1-container",
     type = "recipe",
-    category = "crafting",
+    categories = {"crafting"},
     energy_required = 1,
     ingredients =
     {
@@ -247,6 +261,7 @@ function ei_containers_lib.make_container(size, slots, typus, animation)
 
     container.name = fullname
     container.icon = ei_containers_item_path..name..typename..".png"
+    container.next_upgrade = nil
 
     image_size = 512
     adjust = 1
@@ -278,7 +293,8 @@ function ei_containers_lib.make_container(size, slots, typus, animation)
 
     -- animation
     if animation then
-        container.animation = {
+        container.robot_door = container.robot_door or {}
+        container.robot_door.animation = {
             layers = {
                 {
                     filename = ei_containers_entity_path..name..typename..".png",
