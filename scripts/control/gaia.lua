@@ -6,12 +6,16 @@
 --     on a Gaia surface and swapped back to the regular variant elsewhere
 --   * build restrictions (entities that can not be built on / outside of Gaia)
 --   * void engine: needs an "out-of-map" void rift in range, draws beams into it
+--   * void rift generator (3.1.0): carves its own out-of-map rift, restores the terrain on removal
+--   * 3.2.0: the fulgoran ruin attractors of Gaia are replaced by the non-craftable ei-conduit-gaia
+--     (new chunks, old saves and the map gen settings of existing Gaia surfaces)
 --
 -- Gaia surfaces are listed in storage.gaia_surfaces (the planet surface "Gaia" is always included;
 -- other mods may add surfaces through the "exotic-industries" remote interface).
 --====================================================================================================
 
 local util = require("scripts/control/util")
+local ei_balance = require("lib/balance")
 
 local model = {}
 
@@ -19,7 +23,10 @@ local model = {}
 model.destroy_gaia = {}
 
 -- buildings that will get destroyed (returned as item) when placed outside of Gaia
-model.destroy_non_gaia = {}
+model.destroy_non_gaia = {
+    -- 3.2.0: the alien terminal only works on Gaia (lib/balance.lua -> alien_console.gaia_only)
+    ["ei-alien-console"] = ei_balance.alien_console.gaia_only or nil,
+}
 
 -- regular entity -> Gaia variant (swapped on Gaia surfaces)
 model.swap_gaia = {
@@ -232,6 +239,200 @@ function model.remove_void_entity(entity)
     engines[entity.unit_number] = nil
 end
 
+--VOID RIFT GENERATOR (3.1.0, design doc §5)
+------------------------------------------------------------------------------------------------------
+-- On build: carves a patch_size x patch_size out-of-map patch south of the generator
+-- (balance.void_rift), remembers the original tiles/resources and casts the void beams into it.
+-- On removal: removes the beams and restores the original terrain and resources.
+-- storage.ei.void_rift_generators[unit_number] = {entity, beams, tiles = {{name, position}},
+--                                                 resources = {{name, position, amount}}}
+
+local VOID_RIFT_GENERATOR = "ei-void-rift-generator"
+
+---Area of the rift patch of a generator (south side, balance.void_rift.patch_gap tiles away).
+---@param entity LuaEntity
+---@return BoundingBox
+local function rift_patch_area(entity)
+    local rift = ei_balance.void_rift
+    local box = entity.bounding_box
+    local center_x = math.floor(entity.position.x)
+    local top = math.ceil(box.right_bottom.y) + rift.patch_gap
+    local half = math.floor(rift.patch_size / 2)
+    return {
+        left_top = {x = center_x - half, y = top},
+        right_bottom = {x = center_x - half + rift.patch_size, y = top + rift.patch_size},
+    }
+end
+
+---Returns the generator as item with a flying text (build not possible here).
+local function refuse_generator(entity, text)
+    flying_text(entity, text, {r = 1, g = 0.3, b = 0.3})
+    model.create_drop(entity)
+    entity.destroy()
+end
+
+---Registers a freshly built void rift generator and carves its rift.
+---@param entity LuaEntity
+function model.register_void_rift_generator(entity)
+    if entity.name ~= VOID_RIFT_GENERATOR or not entity.unit_number then
+        return
+    end
+
+    local surface = entity.surface
+    if surface.platform then
+        refuse_generator(entity, "Can't open a Void Rift on a platform")
+        return
+    end
+
+    -- the patch must be free: no entities except resources (they are stored and restored)
+    local area = rift_patch_area(entity)
+    local blocking = surface.find_entities_filtered{area = area, type = "resource", invert = true}
+    for _, blocker in pairs(blocking) do
+        -- only colliding entities block (characters, trees, buildings...); remnants/markers do not
+        if blocker.valid and next(blocker.prototype.collision_mask.layers) ~= nil then
+            refuse_generator(entity, "Void Rift area is blocked")
+            return
+        end
+    end
+
+    local data = {entity = entity, tiles = {}, resources = {}}
+
+    for _, resource in pairs(surface.find_entities_filtered{area = area, type = "resource"}) do
+        table.insert(data.resources, {name = resource.name, position = resource.position, amount = resource.amount})
+        resource.destroy()
+    end
+
+    local new_tiles = {}
+    for x = area.left_top.x, area.right_bottom.x - 1 do
+        for y = area.left_top.y, area.right_bottom.y - 1 do
+            local tile = surface.get_tile(x, y)
+            table.insert(data.tiles, {name = tile.name, position = {x = x, y = y}})
+            table.insert(new_tiles, {name = VOID_RIFT_TILE, position = {x = x, y = y}})
+        end
+    end
+    surface.set_tiles(new_tiles, true)
+
+    local rift_tile = surface.get_tile(math.floor((area.left_top.x + area.right_bottom.x) / 2), area.left_top.y)
+    data.beams = cast_void_beam(entity, rift_tile)
+
+    storage.ei.void_rift_generators = storage.ei.void_rift_generators or {}
+    storage.ei.void_rift_generators[entity.unit_number] = data
+    flying_text(entity, "Void Rift opened", {r = 0, g = 0.77, b = 1})
+end
+
+---Removes the beams and restores the original terrain of a generator that gets removed.
+---@param entity LuaEntity
+function model.remove_void_rift_generator(entity)
+    if entity.name ~= VOID_RIFT_GENERATOR or not entity.unit_number then
+        return
+    end
+
+    local generators = storage.ei.void_rift_generators
+    local data = generators and generators[entity.unit_number]
+    if not data then
+        return
+    end
+
+    for _, group in pairs(data.beams or {}) do
+        for _, beam in pairs(group) do
+            util.destroy_entity(beam)
+        end
+    end
+
+    local surface = entity.surface
+    surface.set_tiles(data.tiles, true)
+    for _, resource in pairs(data.resources) do
+        surface.create_entity{name = resource.name, position = resource.position, amount = resource.amount}
+    end
+
+    generators[entity.unit_number] = nil
+end
+
+--GAIA CONDUITS (3.2.0)
+------------------------------------------------------------------------------------------------------
+
+local RUIN_ATTRACTOR = "fulgoran-ruin-attractor"
+local GAIA_CONDUIT = "ei-conduit-gaia"
+
+---Replaces the vanilla ruin attractors of a Gaia surface (optionally only inside an area) with
+---ei-conduit-gaia. Does nothing outside of Gaia.
+---@param surface LuaSurface
+---@param area BoundingBox|nil
+function model.replace_ruin_attractors(surface, area)
+    if not (surface and surface.valid and model.is_gaia_surface(surface)) then
+        return
+    end
+    if not prototypes.entity[GAIA_CONDUIT] then
+        return
+    end
+
+    for _, attractor in pairs(surface.find_entities_filtered{name = RUIN_ATTRACTOR, area = area}) do
+        local position = attractor.position
+        attractor.destroy()
+        surface.create_entity{
+            name = GAIA_CONDUIT,
+            position = position,
+            force = "neutral",
+            create_build_effect_smoke = false,
+            raise_built = false,
+        }
+    end
+end
+
+-- entities that are autoplaced on every Gaia surface since 3.2.0 (settings of new map chunks)
+local GAIA_BOULDERS = {
+    "ei-gaia-boulder-violet", "ei-gaia-boulder-red", "ei-gaia-boulder-slate",
+    "ei-gaia-boulder-basalt", "ei-gaia-boulder-ice", "ei-gaia-boulder-sandstone",
+}
+model.GAIA_BOULDERS = GAIA_BOULDERS
+
+---Future chunks of an existing Gaia surface generate ei-conduit-gaia instead of ruin attractors
+---and the Gaia boulders (3.2.0).
+---@param surface LuaSurface
+local function update_map_gen_settings(surface)
+    local settings = surface.map_gen_settings
+    local entity_settings = settings.autoplace_settings
+        and settings.autoplace_settings.entity
+        and settings.autoplace_settings.entity.settings
+    if not entity_settings then
+        return
+    end
+
+    local changed = false
+    if entity_settings[RUIN_ATTRACTOR] then
+        entity_settings[GAIA_CONDUIT] = entity_settings[RUIN_ATTRACTOR]
+        entity_settings[RUIN_ATTRACTOR] = nil
+        changed = true
+    end
+    for _, boulder in pairs(GAIA_BOULDERS) do
+        if not entity_settings[boulder] and prototypes.entity[boulder] then
+            entity_settings[boulder] = {frequency = 1, size = 1, richness = 1}
+            changed = true
+        end
+    end
+
+    if changed then
+        -- never let a map gen detail break the migration
+        pcall(function() surface.map_gen_settings = settings end)
+    end
+end
+
+---Migration (idempotent): every existing Gaia surface.
+function model.migrate_conduits()
+    for surface_name, _ in pairs(storage.gaia_surfaces or {}) do
+        local surface = game.get_surface(surface_name)
+        if surface then
+            update_map_gen_settings(surface)
+            model.replace_ruin_attractors(surface)
+        end
+    end
+end
+
+---on_chunk_generated: ruin attractors generated by old map gen settings are replaced.
+function model.on_chunk_generated(event)
+    model.replace_ruin_attractors(event.surface, event.area)
+end
+
 --DEV COMMANDS
 ------------------------------------------------------------------------------------------------------
 
@@ -270,6 +471,9 @@ function model.on_built_entity(entity)
 
     model.register_void_engine(entity)
     if entity.valid then
+        model.register_void_rift_generator(entity)
+    end
+    if entity.valid then
         model.swap_entity(entity)
     end
 end
@@ -277,6 +481,7 @@ end
 function model.on_destroyed_entity(entity)
     if util.is_valid(entity) then
         model.remove_void_entity(entity)
+        model.remove_void_rift_generator(entity)
     end
 end
 

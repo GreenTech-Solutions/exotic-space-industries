@@ -5,10 +5,9 @@ local model = {}
 --GATE
 --====================================================================================================
 
--- teleport costs in MJ
+-- transport costs in MJ (the gate only transports items; the old drone/player teleport was removed)
 -- 50MW spare per portal -> 100 Items/s
 model.energy_costs = {
-    ["player"] = 10,
     ["item"] = 1
 }
 
@@ -17,6 +16,193 @@ model.inverse_surface = {
     ["Gaia"] = "nauvis",
     ["nauvis"] = "Gaia"
 }
+
+--HUB RULE (3.1.0, design doc §2)
+------------------------------------------------------------------------------------------------------
+-- Gaia is the mandatory hub of the gate network: every jump goes through Gaia.
+--   gate NOT on Gaia -> the exit may only be on a Gaia surface
+--   gate on Gaia     -> the exit may be on any OTHER surface (planets, platforms)
+-- Allowed: Nauvis <-> Gaia <-> Fulgora, Gaia <-> platform. Not allowed: Nauvis <-> Fulgora.
+-- Enforced in the exit dropdown (model.get_data), when an exit is set (update_surface,
+-- used_remote), before every transfer (model.gate_state) and for old saves (model.migrate).
+
+---Returns true if a gate on `gate_surface` may use `exit_surface` as exit.
+---@param gate_surface LuaSurface
+---@param exit_surface LuaSurface|nil
+function model.is_allowed_exit(gate_surface, exit_surface)
+    if not (exit_surface and exit_surface.valid) then
+        return false
+    end
+    if ei_gaia.is_gaia_surface(gate_surface) then
+        return exit_surface.index ~= gate_surface.index
+    end
+    return ei_gaia.is_gaia_surface(exit_surface)
+end
+
+--CALIBRATION (3.2.0): planet samples are the keys of the exits
+------------------------------------------------------------------------------------------------------
+-- The first exit a force sets on a planet has to be calibrated with a sample of the planet rock,
+-- item "ei-planet-sample-<planet>" (prototypes/alien_structures/planet-samples.lua). The sample is
+-- taken from the player inventory, else from the gate container. Calibrations are stored per force
+-- and surface in storage.ei.gate.calibrated[force_index][surface_name].
+--   Nauvis                     free (home planet)
+--   Gaia (+ extra Gaia surfaces) key "ei-planet-sample-gaia"
+--   other planets              key of the planet; no key item (modded planet without a
+--                              compatibility patch) -> no gate exit at all
+--   space platforms            free, but ONLY while the platform orbits Gaia (checked live)
+--   any other surface          no gate exit
+
+local SAMPLE_PREFIX = "ei-planet-sample-"
+local FREE_SURFACES = {["nauvis"] = true}
+
+---Key of an exit surface: nil = free, item name = key needed, false = not a possible exit.
+---@param surface LuaSurface
+---@return string|false|nil
+function model.calibration_key(surface)
+    if FREE_SURFACES[surface.name] then return nil end
+    if ei_gaia.is_gaia_surface(surface) then
+        return prototypes.item[SAMPLE_PREFIX .. "gaia"] and SAMPLE_PREFIX .. "gaia" or false
+    end
+    if surface.platform then
+        local location = surface.platform.space_location
+        if location and location.name == "Gaia" then return nil end
+        return false
+    end
+    if surface.planet then
+        local key = SAMPLE_PREFIX .. string.lower(surface.planet.name)
+        return prototypes.item[key] and key or false
+    end
+    return false
+end
+
+---Readable name of a surface for messages (planet name, platform name or surface name).
+---@param surface LuaSurface
+local function surface_label(surface)
+    if surface.planet then return surface.planet.prototype.localised_name end
+    if surface.platform then return surface.platform.name end
+    return surface.name
+end
+
+---Calibration table of a force (created on demand).
+---@param force LuaForce
+local function calibrations(force)
+    storage.ei.gate.calibrated = storage.ei.gate.calibrated or {}
+    local list = storage.ei.gate.calibrated[force.index]
+    if not list then
+        list = {}
+        storage.ei.gate.calibrated[force.index] = list
+    end
+    return list
+end
+
+---True if the force may transfer items to `surface` right now (free or calibrated).
+---@param force LuaForce
+---@param surface LuaSurface
+function model.is_calibrated(force, surface)
+    local key = model.calibration_key(surface)
+    if key == nil then return true end
+    if key == false then return false end
+    return calibrations(force)[surface.name] == true
+end
+
+---Marks a surface as calibrated for a force (migration, compatibility, console commands).
+---@param force LuaForce
+---@param surface_name string
+function model.set_calibrated(force, surface_name)
+    calibrations(force)[surface_name] = true
+end
+
+---Calibrates `surface` for the gate's force if needed: consumes one sample from the player
+---inventory or the gate container. Prints why it failed. Returns true when the exit is usable.
+---@param gate LuaEntity
+---@param surface LuaSurface
+---@param player LuaPlayer|nil
+---@param character LuaEntity|nil the player's character while the player uses the gate remote
+function model.try_calibrate(gate, surface, player, character)
+    if model.is_calibrated(gate.force, surface) then return true end
+    local key = model.calibration_key(surface)
+    local print_to = (player and player.valid) and player or gate.force
+    if not key then
+        print_to.print({"exotic-industries.gate-no-key", surface_label(surface)})
+        return false
+    end
+
+    -- player inventory first, then the gate container
+    local sources = {}
+    if util.is_valid(character) then
+        table.insert(sources, character.get_main_inventory())
+    elseif player and player.valid then
+        table.insert(sources, player.get_main_inventory())
+    end
+    local gate_data = storage.ei.gate.gate[gate.unit_number]
+    if gate_data and util.is_valid(gate_data.container) then
+        table.insert(sources, gate_data.container.get_inventory(defines.inventory.chest))
+    end
+    for _, inventory in pairs(sources) do
+        if inventory and inventory.get_item_count(key) > 0 then
+            inventory.remove({name = key, count = 1})
+            model.set_calibrated(gate.force, surface.name)
+            gate.force.print({"exotic-industries.gate-calibrated", surface_label(surface), "[item=" .. key .. "]"})
+            return true
+        end
+    end
+
+    print_to.print({"exotic-industries.gate-needs-sample", surface_label(surface), "[item=" .. key .. "]"})
+    return false
+end
+
+---Grandfathers the exits of existing gates (saves from before 3.2.0 need no samples).
+local function grandfather_calibrations()
+    if storage.ei.gate_calibration_migrated then return end
+    storage.ei.gate_calibration_migrated = true
+    for _, data in pairs(storage.ei.gate.gate or {}) do
+        local surface = data.exit and game.get_surface(data.exit.surface or "")
+        if util.is_valid(data.gate) and surface and model.calibration_key(surface) then
+            model.set_calibrated(data.gate.force, surface.name)
+        end
+    end
+end
+
+---Names of all surfaces a gate may use as exit (dropdown content).
+---@param gate LuaEntity
+---@return string[]
+function model.allowed_exit_surfaces(gate)
+    local names = {}
+    for _, surface in pairs(game.surfaces) do
+        if model.is_allowed_exit(gate.surface, surface) and model.calibration_key(surface) ~= false then
+            table.insert(names, surface.name)
+        end
+    end
+    return names
+end
+
+---Default exit surface of a new gate: the inverse surface if allowed, else the first allowed one.
+---@param gate LuaEntity
+---@return string|nil
+local function default_exit_surface(gate)
+    local inverse = model.inverse_surface[gate.surface.name]
+    if inverse and model.is_allowed_exit(gate.surface, game.get_surface(inverse)) then
+        return inverse
+    end
+    return model.allowed_exit_surfaces(gate)[1]
+end
+
+---Idempotent migration: exits that break the hub rule are reset to the default exit
+---(the gate is switched off, its exit container link is dropped).
+function model.migrate()
+    local gates = storage.ei.gate and storage.ei.gate.gate
+    if gates then grandfather_calibrations() end
+    for _, data in pairs(gates or {}) do
+        local gate = data.gate
+        if gate and gate.valid and data.exit
+            and not model.is_allowed_exit(gate.surface, game.get_surface(data.exit.surface or "")) then
+            data.exit = {surface = default_exit_surface(gate), x = 0, y = 0}
+            data.exit_container = nil
+            data.state = false
+            gate.force.print({"exotic-industries.gate-hub-rule-reset", gate.position.x, gate.position.y, gate.surface.name})
+        end
+    end
+end
 
 --DOC
 ------------------------------------------------------------------------------------------------------
@@ -136,7 +322,7 @@ function model.register_gate(gate, container)
     storage.ei.gate.gate[gate_unit].container = container
 
     -- set endpoint to (0, 0)
-    storage.ei.gate.gate[gate_unit].exit = {surface = model.inverse_surface[gate.surface.name], x = 0, y = 0}
+    storage.ei.gate.gate[gate_unit].exit = {surface = default_exit_surface(gate), x = 0, y = 0}
     storage.ei.gate.gate[gate_unit].state = false
 
 
@@ -227,11 +413,11 @@ function model.destroy_gate(gate, container)
 end
 
 
-function model.check_for_teleport(unit, gate)
-
-    -- loop over all gates and check if there is a player in range
-    -- if so check if enough power and if endpoint has exit
-    -- spawn in exit if not and teleport
+---Moves items from the gate container into the exit container (if powered, switched on and the
+---exit is valid). Every transported item costs model.energy_costs.item MJ.
+---@param unit integer gate unit number
+---@param gate LuaEntity
+function model.transfer_items(unit, gate)
 
     if not model.gate_state(gate) then
         return
@@ -355,7 +541,19 @@ function model.gate_state(gate)
 
     -- will be false if no exit is set
 
-    if not storage.ei.gate.gate[gate.unit_number] or not storage.ei.gate.gate[gate.unit_number].exit then
+    local exit = storage.ei.gate.gate[gate.unit_number] and storage.ei.gate.gate[gate.unit_number].exit
+    if not exit then
+        return false
+    end
+
+    -- hub rule: an exit that breaks it never transfers anything
+    local exit_surface = game.get_surface(exit.surface or "")
+    if not model.is_allowed_exit(gate.surface, exit_surface) then
+        return false
+    end
+
+    -- calibration (a platform exit is only usable while the platform orbits Gaia)
+    if not model.is_calibrated(gate.force, exit_surface) then
         return false
     end
 
@@ -378,14 +576,8 @@ function model.pay_energy(gate, tablein)
     -- if so, pay and return true
 
     local energy = 0
-    for i,v in ipairs(tablein) do
-        if type(v) == "string" and v == "player" then
-            energy = energy + model.energy_costs.player
-        end
-
-        if type(v) == "table" then --for item
-            energy = energy + model.energy_costs.item * v.count
-        end
+    for _, v in ipairs(tablein) do
+        energy = energy + model.energy_costs.item * v.count
     end
 
     -- change to Mj
@@ -399,21 +591,6 @@ function model.pay_energy(gate, tablein)
     return true
 
 end
-
-function model.teleport_player(character, gate)
-
-    local player = character.player
-    if not player then
-        return
-    end
-
-    local exit = storage.ei.gate.gate[gate.unit_number].exit
-
-    -- teleport player
-    player.teleport({exit.x, exit.y}, exit.surface)
-
-end
-
 
 function model.update_energy(unit, gate)
 
@@ -609,7 +786,7 @@ function model.open_gui(player)
 
         titlebar.add{
             type = "empty-widget",
-            style = "ei_titlebar_nondraggable_spacer",
+            style = "ei-titlebar-nondraggable-spacer",
             ignored_by_interaction = true
         }
 
@@ -636,7 +813,7 @@ function model.open_gui(player)
     do -- Status subheader
         main_container.add{
             type = "frame",
-            style = "ei_subheader_frame",
+            style = "ei-subheader-frame",
         }.add{
             type = "label",
             caption = {"exotic-industries.gate-gui-status-title"},
@@ -647,7 +824,7 @@ function model.open_gui(player)
             type = "flow",
             name = "status-flow",
             direction = "vertical",
-            style = "ei_inner_content_flow",
+            style = "ei-inner-content-flow",
         }
 
         status_flow.add{
@@ -655,7 +832,7 @@ function model.open_gui(player)
             name = "energy",
             caption = {"exotic-industries.gate-gui-status-energy", 0},
             tooltip = {"exotic-industries.gate-gui-status-energy-tooltip"},
-            style = "ei_status_progressbar"
+            style = "ei-status-progressbar"
         }
 
     end
@@ -664,7 +841,7 @@ function model.open_gui(player)
     do -- Control subheader
         main_container.add{
             type = "frame",
-            style = "ei_subheader_frame",
+            style = "ei-subheader-frame",
         }.add{
             type = "label",
             caption = {"exotic-industries.gate-gui-control-title"},
@@ -675,7 +852,7 @@ function model.open_gui(player)
             type = "flow",
             name = "control-flow",
             direction = "horizontal",
-            style = "ei_inner_content_flow_horizontal",
+            style = "ei-inner-content-flow-horizontal",
         }
 
         local target_flow = control_flow.add{
@@ -721,7 +898,7 @@ function model.open_gui(player)
             type = "button",
             name = "position-button",
             caption = {"exotic-industries.gate-gui-control-position-button", 0, 0},
-            style = "ei_small_button",
+            style = "ei-small-button",
             tags = {
                 action = "set-position",
                 parent_gui = "ei-gate-console",
@@ -737,7 +914,7 @@ function model.open_gui(player)
             name = "state-button",
             caption = {"exotic-industries.gate-gui-control-state-button", "OFF"},
             tooltip = {"exotic-industries.gate-gui-control-state-button-tooltip"},
-            style = "ei_small_red_button",
+            style = "ei-small-red-button",
             tags = {
                 action = "set-state",
                 parent_gui = "ei-gate-console",
@@ -748,7 +925,7 @@ function model.open_gui(player)
         local camera_frame = control_flow.add{
             type = "frame",
             name = "camera-frame",
-            style = "ei_small_camera_frame"
+            style = "ei-small-camera-frame"
         }
         camera_frame.add{
             type = "camera",
@@ -756,7 +933,7 @@ function model.open_gui(player)
             position = {0, 0},
             surface_index = 1,
             zoom = 0.25,
-            style = "ei_small_camera"
+            style = "ei-small-camera"
         }
 
     end
@@ -793,8 +970,15 @@ function model.update_gui(player, data, ontick)
     local selected_index
     local surface_strings = {}
     for i, possible_surface in pairs(data.surfaces) do
-      if game.get_surface(possible_surface) then
-        surface_strings[i] = possible_surface
+      local surface = game.get_surface(possible_surface)
+      if surface then
+        -- surfaces that still need a sample show its icon
+        local key = model.calibration_key(surface)
+        if key and not model.is_calibrated(player.force, surface) then
+            surface_strings[i] = possible_surface .. " [item=" .. key .. "]"
+        else
+            surface_strings[i] = possible_surface
+        end
         if data.target_surface == possible_surface then
           selected_index = i
         end
@@ -823,10 +1007,10 @@ function model.update_gui(player, data, ontick)
 
     -- State button
     if data.state then
-        state.style = "ei_small_green_button"
+        state.style = "ei-small-green-button"
         state.caption = {"exotic-industries.gate-gui-control-state-button", "ON"}
     else
-        state.style = "ei_small_red_button"
+        state.style = "ei-small-red-button"
         state.caption = {"exotic-industries.gate-gui-control-state-button", "OFF"}
     end
 
@@ -865,7 +1049,20 @@ function model.update_surface(player)
 
     if not gate or not selected_surface or not storage.ei.gate.gate[gate.unit_number] then return end
 
+    -- hub rule (the dropdown only offers allowed surfaces, but tags could be stale)
+    if not model.is_allowed_exit(gate.surface, game.get_surface(selected_surface)) then
+        player.print({"exotic-industries.gate-hub-rule"})
+        return
+    end
+
+    -- the first exit on a planet needs a sample of its rock
+    if not model.try_calibrate(gate, game.get_surface(selected_surface), player) then
+        model.update_gui(player, model.get_data(gate)) -- restore the dropdown selection
+        return
+    end
+
     storage.ei.gate.gate[gate.unit_number].exit.surface = selected_surface
+    storage.ei.gate.gate[gate.unit_number].exit_container = nil -- the old container is on another surface
 
     local data = model.get_data(gate)
     model.update_gui(player, data)
@@ -889,8 +1086,12 @@ function model.toggle_state(player)
     if energy < 1000000000 then
         player.print({"exotic-industries.gate-not-enough-energy", gate.position.x, gate.position.y, gate.surface.name})
     else
-        -- toggle state
-        storage.ei.gate.gate[gate.unit_number].state = not storage.ei.gate.gate[gate.unit_number].state
+        -- switching on: the current exit (e.g. the default one) may still need its sample
+        local gate_data = storage.ei.gate.gate[gate.unit_number]
+        local exit_surface = game.get_surface(gate_data.exit.surface or "")
+        if gate_data.state or (exit_surface and model.try_calibrate(gate, exit_surface, player)) then
+            gate_data.state = not gate_data.state
+        end
     end
 
     local data = model.get_data(gate)
@@ -983,12 +1184,8 @@ function model.get_data(gate)
     data.max_energy = gate.electric_buffer_size
     data.energy = gate.energy
 
-    -- get list of all surfaces
-    local surfaces = {}
-    for i,v in pairs(game.surfaces) do
-        table.insert(surfaces, v.name)
-    end
-    data.surfaces = surfaces
+    -- surfaces allowed by the hub rule (gate on Gaia: all others, elsewhere: only Gaia)
+    data.surfaces = model.allowed_exit_surfaces(gate)
 
     local exit = storage.ei.gate.gate[gate.unit_number].exit
     data.target_surface = exit.surface
@@ -1013,29 +1210,6 @@ function model.change_permission(player, new_group)
 
 end
 
---[[
-function model.update_player_permissions()
-
-    if not script.active_mods["RemoteConfiguration"] then
-        return
-    end
-
-    if not storage.ei.gate.gate_user_permission then
-        return
-    end
-
-    for player_id,tick in pairs(storage.ei.gate.gate_user_permission) do
-        if game.tick > tick then
-            local player = game.get_player(player_id)
-            if player then
-                player.permission_group = game.permissions.get_group("gate-user")
-            end
-            storage.ei.gate.gate_user_permission[player_id] = nil
-        end
-    end
-
-end
-]]
 
 --HANDLERS
 -----------------------------------------------------------------------------------------------------
@@ -1104,7 +1278,7 @@ function model.update()
 
     local gate = gates[key].gate
     if gate and gate.valid then
-        model.check_for_teleport(key, gate)
+        model.transfer_items(key, gate)
         model.update_renders(key, gate)
         model.update_energy(key, gate)
     else
@@ -1203,7 +1377,10 @@ function model.used_remote(event)
     if not player_index then return end
 
     local gate_data = storage.ei.gate.gate[data.gate_unit]
-    if gate_data and util.is_valid(gate_data.gate) then
+    if gate_data and util.is_valid(gate_data.gate) and not model.is_allowed_exit(gate_data.gate.surface, surface) then
+        util.force_print(gate_data.gate, {"exotic-industries.gate-hub-rule"}) -- hub rule
+    elseif gate_data and util.is_valid(gate_data.gate)
+        and model.try_calibrate(gate_data.gate, surface, data.player, data.original_character) then
         if not model.find_container(gate_data.gate, surface, position, true) then
             gate_data.exit = {
                 surface = surface.name,

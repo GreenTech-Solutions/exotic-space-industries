@@ -24,7 +24,7 @@ local blank = {
     ["recipe"] = {
         name = "ei-holo-moon",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -94,7 +94,7 @@ local blank = {
     ["running"] = {
         name = "ei-holo-moon-running",
         type = "recipe",
-        category = "ei-holo-moon",
+        categories = {"ei-holo-moon"},
         energy_required = 1000,
         ingredients = {},
         results = {},
@@ -136,7 +136,7 @@ local function make_holo(dest, icon_size, ani_size, lenght, scale)
     holo.entity.graphics_set.working_visualisations[1].animation.scale = holo.entity.graphics_set.working_visualisations[1].animation.scale * scale
 
     holo.running.name = "ei-holo-"..dest.."-running"
-    holo.running.category = "ei-holo-"..dest
+    holo.running.categories = {"ei-holo-"..dest}
 
     data:extend({holo.category, holo.item, holo.recipe, holo.entity, holo.running})
 end
@@ -170,3 +170,8 @@ table.insert(data.raw["technology"]["ei-black-hole"].effects, {type = "unlock-re
 
 make_holo("galaxy", 128, 128, 8, 1.2)
 table.insert(data.raw["technology"]["ei-black-hole"].effects, {type = "unlock-recipe", recipe = "ei-holo-galaxy"})
+
+-- 3.2.0: gas cloud hologram (destinations/gas.png + gas_animation.png, 8x8 frames of 128 px),
+-- unlocked together with the space platform
+make_holo("gas", 128, 128, 8, 1)
+table.insert(data.raw["technology"]["space-platform"].effects, {type = "unlock-recipe", recipe = "ei-holo-gas"})

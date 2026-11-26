@@ -2,6 +2,7 @@
 
 -- ==========================================================================================================
 
+local science_pack_prototypes = require("lib/science_packs").get_prototypes()
 local science_pack_unlock = {["ei-dark-age-tech"]="ei-dark-age"}
 local tiered_tech = {}
 local name = ""
@@ -21,7 +22,7 @@ for _,tech in pairs(data.raw.technology) do
       data.raw.technology[tech.name].prerequisites = {}
       for i,v in ipairs(tech.effects) do
         if v.type == "unlock-recipe" then
-          if data.raw.tool[v.recipe] then 
+          if science_pack_prototypes[v.recipe] then 
             if not science_pack_unlock[v.recipe] then 
               science_pack_unlock[v.recipe] = tech.name
             end
@@ -157,7 +158,7 @@ ei_lib.set_prerequisites("wdm_home_planet",{})
 ei_lib.set_prerequisites("ei-quantum-age",{"ei-advanced-computer-age-tech","ei-alien-computer-age-tech"})
 
 ei_lib.set_prerequisites("automation-2",{"automation","ei-electricity-age"})
-ei_lib.set_prerequisites("ei_fueler",{"ei-electricity-age"})
+ei_lib.set_prerequisites("ei-fueler",{"ei-electricity-age"})
 
 ei_lib.add_prerequisite("laser-shooting-speed-1","laser")
 ei_lib.add_prerequisite("laser-turret","laser")

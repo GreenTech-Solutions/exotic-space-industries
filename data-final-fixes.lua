@@ -22,14 +22,16 @@ require("scripts/data-final-updates/items")
 
 require("scripts/data-final-updates/compatibility")
 require("scripts/data-final-updates/labs")
+-- data center: one recipe per science pack of the big lab (needs the final lab inputs of labs.lua)
+require("scripts/data-final-updates/data_center_recipes")
 
 --====================================================================================================
 --FUELS
 --====================================================================================================
 
 data.raw.reactor["ei-burner-heater"].energy_source.fuel_categories = {"chemical"}
-data.raw.item.wood.fuel_category = "chemical"
-data.raw.item.coal.fuel_category = "chemical"
+data.raw.item.wood.fuel_categories = {"chemical"}
+data.raw.item.coal.fuel_categories = {"chemical"}
 
 --====================================================================================================
 --SPACE PLATFORMS
@@ -69,7 +71,7 @@ data.raw["assembling-machine"]["foundry"].fluid_boxes[4].volume = 5000
 -- the steam assembler can craft everything the assembling machine 1 can
 local steam_assembler = data.raw["assembling-machine"]["ei-steam-assembler"]
 steam_assembler.crafting_categories = table.deepcopy(data.raw["assembling-machine"]["assembling-machine-1"].crafting_categories)
-for _, crafting_category in pairs({"ei-steam-assembler", "crafting", "crafting-with-fluid", "electronics"}) do
+for _, crafting_category in pairs({"ei-steam-assembler", "crafting", "crafting-with-fluid"}) do
     if not ei_lib.table_contains_value(steam_assembler.crafting_categories, crafting_category) then
         table.insert(steam_assembler.crafting_categories, crafting_category)
     end
@@ -118,6 +120,19 @@ if gaia_accumulator then
     end
 end
 
+-- broken alien artifacts: salvage loot, lightning immunity (3.2.0)
+require("scripts/data-final-updates/alien_artifacts")
+
+-- filled barrels of ESI fluids get a generic description naming their fluid (3.2.0)
+for name, item in pairs(data.raw.item) do
+    if string.sub(name, 1, 3) == "ei-" and string.sub(name, -7) == "-barrel" and not item.localised_description then
+        local fluid_name = string.sub(name, 1, -8)
+        if data.raw.fluid[fluid_name] then
+            item.localised_description = {"item-description.ei-filled-barrel", {"fluid-name." .. fluid_name}}
+        end
+    end
+end
+
 --====================================================================================================
 --TECHNOLOGIES
 --====================================================================================================
@@ -139,6 +154,8 @@ end
 --LIGHTNING (Gaia storms)
 --====================================================================================================
 
+
+
 for name, _ in pairs(data.raw["lightning-attractor"]) do
     data.raw["lightning-attractor"][name].resistances = {}
     for damage_type, _ in pairs(data.raw["damage-type"]) do
@@ -150,7 +167,49 @@ data.raw["lightning-attractor"]["fulgoran-ruin-attractor"].range_elongation = 25
 
 for _, lightning in pairs(data.raw["lightning"]) do
     lightning.attracted_volume_modifier = 0.0
-    lightning.damage = lightning.damage * 2.0
+    -- Корректируем урон от молний для совместимости с форматами Factorio 2.x
+    if type(lightning.damage) == "table" then
+        lightning.damage.amount = (lightning.damage.amount or 100) * 2.0
+    else
+        lightning.damage = (lightning.damage or 100) * 2.0
+    end
+end
+
+-- Storm EMP (design doc §7): каждый удар молнии вызывает скриптовое событие "ei-storm-emp"
+local STORM_EMP_TRIGGER = {
+    type = "direct",
+    action_delivery = {
+        type = "instant",
+        target_effects = {{type = "script", effect_id = "ei-storm-emp"}},
+    },
+}
+
+
+
+---Добавляет EMP триггер к эффекту удара молнии (strike_effect).
+---@param strike_effect table|nil Исходный эффект удара молнии.
+---@return table Обновлённый список или элемент триггера.
+local function add_storm_emp(strike_effect)
+    -- Если эффектов не было, возвращаем список с новым триггером
+    if strike_effect == nil then
+        return {STORM_EMP_TRIGGER}
+    end
+
+    -- Если передана одиночная структура триггера, превращаем её в массив
+    if strike_effect.type then
+        return {strike_effect, STORM_EMP_TRIGGER}
+    end
+
+    -- Добавляем триггер в существующий массив
+    table.insert(strike_effect, STORM_EMP_TRIGGER)
+    return strike_effect
+end
+
+
+
+for _, lightning in pairs(data.raw["lightning"]) do
+    lightning.strike_effect = add_storm_emp(lightning.strike_effect)
+    lightning.sound.volume = 0.5
 end
 
 --====================================================================================================
@@ -227,7 +286,7 @@ for _, result in ipairs(SCRAP_RESULTS) do
             type = "item",
             name = result[1],
             amount = 1,
-            probability = result[2],
+            independent_probability = result[2],
             show_details_in_recipe_tooltip = false,
         })
     end
@@ -252,3 +311,6 @@ require("scripts/data-final-updates/productivity_loops")
 
 -- technologies must not require science packs they unlock themselves
 require("scripts/data-final-updates/tech_pack_cycles")
+
+-- alien tree technologies: script-only, visible, dependent on the resonance synthesizer (3.2.0)
+require("scripts/data-final-updates/alien_tree_techs")

@@ -39,7 +39,7 @@ data:extend({
     {
         name = "ei-steam-basic-locomotive",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -57,7 +57,7 @@ data:extend({
     {
         name = "ei-steam-basic-wagon",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -73,7 +73,7 @@ data:extend({
     {
         name = "ei-iron-rail",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 1,
         ingredients =
         {
@@ -384,12 +384,12 @@ data:extend({
 			},
 			match_volume_to_activity = true,
 		},
-		crash_trigger = crash_trigger(),
 		open_sound = { filename = "__base__/sound/machine-open.ogg", volume = 0.85 },
 		close_sound = { filename = "__base__/sound/machine-close.ogg", volume = 0.75 },
 		sound_minimum_speed = 0.5;
 		vehicle_impact_sound =  { filename = "__base__/sound/car-wood-impact.ogg", volume = 1.0 },
 	},
+
 
 
 	{
@@ -425,7 +425,7 @@ data:extend({
     {
         name = "ei-steam-advanced-locomotive",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -441,7 +441,7 @@ data:extend({
     {
         name = "ei-steam-advanced-wagon",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -457,7 +457,7 @@ data:extend({
 	{
         name = "ei-steam-advanced-fluid-wagon",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -559,7 +559,6 @@ data:extend({
 		drive_over_tie_trigger = drive_over_tie(),
 		tie_distance = 50,
 		working_sound =	{ sound = { filename = "__base__/sound/train-wheels.ogg", volume = 0.5 }, match_volume_to_activity = true, },
-		crash_trigger = crash_trigger(),
 		open_sound = { filename = "__base__/sound/machine-open.ogg", volume = 0.85 },
 		close_sound = { filename = "__base__/sound/machine-close.ogg", volume = 0.75 },
 		sound_minimum_speed = 0.5;
@@ -696,7 +695,6 @@ data:extend({
 			},
 			match_volume_to_activity = true,
 		},
-		crash_trigger = crash_trigger(),
 		sound_minimum_speed = 0.5;
 		vehicle_impact_sound =  { filename = "__base__/sound/car-wood-impact.ogg", volume = 1.0 },
 	},

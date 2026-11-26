@@ -48,6 +48,9 @@ data:extend({
     {
         name = "ei-space-data",
         type = "item",
+        -- only an icon source for the space science pack (scripts/data-final-updates/items.lua);
+        -- every recipe using it is swapped to the space science pack, so the item stays hidden
+        hidden = true,
         icon = ei_graphics_item_path.."space-data.png",
         icon_size = 128,
         subgroup = "ei-refining-tech",
@@ -74,7 +77,7 @@ data:extend({
     {
         name = "ei-small-simulator",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 1,
         ingredients =
         {
@@ -169,7 +172,7 @@ data:extend({
     {
         name = "ei-simulation-data",
         type = "recipe",
-        category = "ei-small-simulator",
+        categories = {"ei-small-simulator"},
         energy_required = 5,
         ingredients = {
             {type = "fluid", name = "ei-computing-power", amount = 2},

@@ -38,7 +38,6 @@ end
 
 local function is_exoplanetary_science(pack)
   if string.sub(pack, 1, 3) == "ei-" then return false end
-  if string.sub(pack, 1, 3) == "ei_" then return false end
   if not ei_data.science_dict[pack] then return true end
   return false
 end
@@ -102,40 +101,106 @@ end
 
 
 
+-- get_ages state (data stage only):
+--   age_cache   tech name -> ages of a non-root tech (memoization, also avoids exponential walks)
+--   age_active  tech name -> its index in age_path while it is being resolved (cycle detection)
+--   age_path    current prerequisite chain (for the cycle log)
+local age_cache, age_active, age_path = {}, {}, {}
+local logged_cycles = {}
+
+-- make sure every tech has its name set to its id
+for i,tech in pairs(data.raw.technology) do
+    if not tech.name then
+        tech.name = i
+    elseif tech.name ~= i then
+        tech.name = i
+    end
+end
+
+-- Depth guard (safety net for extremely deep but acyclic trees)
+local age_depth = 0
+local age_max_depth = 400
+local age_logged_depth = false
+
 ---Returns all ages a technology belongs to (its own age or the ages of its prerequisites).
+---Prerequisite cycles (usually two mods depending on each other's technologies) no longer
+---overflow the stack: the chain is written to factorio-current.log once and cut there.
+---(3.2.0, based on a player patch)
 ---@param tech table technology prototype
 ---@param is_root boolean|nil true for the technology whose age is being determined
 local function get_ages(tech, is_root)
     if not tech then return {} end
 
+    age_depth = age_depth + 1
+    if age_depth > age_max_depth then
+        if not age_logged_depth then
+            age_logged_depth = true
+            local path = {}
+            for i = 1, #age_path do
+                table.insert(path, age_path[i])
+            end
+            table.insert(path, tostring(tech.name))
+            log("[exotic-space-industries] WARNING: recursive tech depth exceeded " ..
+                age_max_depth .. ":\n    " ..
+                table.concat(path, "\n -> "))
+        end
+        age_depth = age_depth - 1
+        return {}
+    end
+
+    if not is_root and age_cache[tech.name] then
+        age_depth = age_depth - 1
+        return age_cache[tech.name]
+    end
+
+    -- cycle: log the chain (once per entry point) and stop descending
+    local start = age_active[tech.name]
+    if start then
+        local cycle = {}
+        for i = start, #age_path do
+            table.insert(cycle, age_path[i])
+        end
+        table.insert(cycle, tech.name)
+        local text = table.concat(cycle, " -> ")
+        if not logged_cycles[text] then
+            logged_cycles[text] = true
+            log("[exotic-space-industries] WARNING: technology prerequisite cycle (please report it to the mods involved):\n    " .. text)
+        end
+        age_depth = age_depth - 1
+        return tech.age and {tech.age} or {}
+    end
+
+    age_active[tech.name] = #age_path + 1
+    table.insert(age_path, tech.name)
+
+    local result
     -- A tech that unlocks an age tech pack gives that age to the techs depending on it.
     -- The unlocking tech itself must NOT get that age: it would need the pack it unlocks
     -- (e.g. "kr-imersium-processing" requiring the imersite tech pack it unlocks).
     if not is_root and ei_data.tech_ages_with_sub[tech.name] then
-        return {ei_data.tech_ages_with_sub[tech.name]}
-    end
-
-    if tech.age then
-        return {tech.age}
-    end
-
-    if not tech.prerequisites then
-        return {}
-    end
-
-    local return_ages = {}
-    
-    for i,v in ipairs(tech.prerequisites) do
-        local ages = get_ages(data.raw.technology[v])
-        if ages then
-            for x,y in ipairs(ages) do
-                table.insert(return_ages, y)
+        result = {ei_data.tech_ages_with_sub[tech.name]}
+    elseif tech.age then
+        result = {tech.age}
+    else
+        result = {}
+        local seen_age = {}
+        for _, prerequisite in ipairs(tech.prerequisites or {}) do
+            for _, age in ipairs(get_ages(data.raw.technology[prerequisite])) do
+                if not seen_age[age] then
+                    seen_age[age] = true
+                    table.insert(result, age)
+                end
             end
         end
     end
 
-    return return_ages
-
+    table.remove(age_path)
+    age_active[tech.name] = nil
+    if not is_root then
+        age_cache[tech.name] = result
+    end
+    age_depth = age_depth - 1
+    return result
 end
 
 
@@ -203,7 +268,6 @@ end
 
 for i,tech in pairs(data.raw.technology) do
     if string.sub(i, 1, 3) == "ei-" then goto continue end
-    if string.sub(i, 1, 3) == "ei_" then goto continue end
 
     -- if tech has age skip
     if tech.age then
@@ -313,39 +377,6 @@ for i,v in pairs(data.raw.technology) do
     if v.unit and v.unit.ingredients then
         v.unit.ingredients = unique_ingredients(v.unit.ingredients)
     end
-
-    -- icons
-    if data.raw.technology[i].age then
-
-        local effects = util.table.deepcopy(data.raw.technology[i].effects)
-        local icon_found = false
-
-        if not effects then goto continue end
-
-        local id = 1
-        while true do
-            if not effects[id] then
-                break
-            end
-
-            local y = effects[id]
-            if y.type == "nothing" then
-                if y.icon == ei_graphics_other_path.."tech_overlay.png" then
-                    table.remove(effects, id)
-                    icon_found = true
-                    id = 1
-                end
-            end
-
-            id = id + 1
-
-        end
-
-        data.raw.technology[i].effects = effects
-
-        ::continue::
-        
-    end
 end
 
 
@@ -368,10 +399,6 @@ for tech_id,_ in pairs(data.raw.technology) do
 
     local tech = data.raw.technology[tech_id]
 
-    -- skip techs that end with :dummy
-    if string.sub(tech_id, -6) == "-dummy" then
-        goto continue
-    end
     if tech_id == "ei-temp" then
         goto continue
     end
@@ -485,9 +512,7 @@ end
 
 for tech_id,_ in pairs(data.raw.technology) do
   local tech = data.raw.technology[tech_id]
-  if string.sub(tech_id, -6) == "-dummy" then goto continue end
   if string.sub(tech_id, 1, 3) == "ei-" then goto continue end
-  if string.sub(tech_id, 1, 3) == "ei_" then goto continue end
   if tech_id == "ei-temp" then goto continue end
   -- if not tech.prerequisites then goto continue end
   -- if #tech.prerequisites == 0 then goto continue end
@@ -496,7 +521,8 @@ for tech_id,_ in pairs(data.raw.technology) do
   
   for index = #tech.unit.ingredients, 1, -1 do
     local pack = tech.unit.ingredients[index][1]
-    if data.raw.tool[pack] and (data.raw.tool[pack].hidden or ei_data.science_dict[pack]) then
+    local pack_prototype = (data.raw.item and data.raw.item[pack]) or (data.raw.tool and data.raw.tool[pack])
+    if pack_prototype and (pack_prototype.hidden or ei_data.science_dict[pack]) then
       table.remove(tech.unit.ingredients, index)
     end
   end
@@ -568,9 +594,4 @@ ei_lib.remove_tech("steam-power")
 ei_lib.remove_tech("wdm_ship_fix_lock")
 
 ei_lib.remove_tech("ei-temp")
-ei_lib.remove_tech("ei-steam-age-dummy")
-ei_lib.remove_tech("ei-electricity-age-dummy")
-ei_lib.remove_tech("ei-computer-age-dummy")
-ei_lib.remove_tech("ei-quantum-age-dummy")
-ei_lib.remove_tech("ei-exotic-age-dummy")
 

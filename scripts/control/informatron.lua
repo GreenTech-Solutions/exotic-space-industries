@@ -33,14 +33,22 @@ function model.menu(player_index)
         world_gen_related = {
             resources = 1,
             artifacts = 1,
+            -- 3.1.0: the old "knowledge" gate (storage.ei.knowledge, never set anywhere) made
+            -- gate/repair unreachable; they are permanent menu entries now
+            repair = 1,
+            alien = 1,
+            gate = 1,
         },
         new_logistics = {
             train_progression = 1,
             cranes_and_belts = 1,
+            radio_stations = 1,
+            drones = 1,
         },
         new_mechanics = {
             beacon_overhaul = 1,
             specialised_pipes = 1,
+            gaia_hub = 1,
             induction_matrix = 1,
             exotic_stabilizer = 1,
         },
@@ -52,29 +60,8 @@ function model.menu(player_index)
 
     -- optional pages
     if force then
-
-        model.new_mechanics.black_hole = 1
-
-        -- knowledge system page
-        if storage.ei and storage.ei.knowledge then
-
-            if storage.ei.knowledge["player"] then
-                model.world_gen_related.knowledge = nil
-                model.world_gen_related.gate = 1
-                model.world_gen_related.repair = 1
-
-                model.world_gen_related.artifacts = nil
-            end
-
-        end
-
-    end
-
-    --[[
-    if game.forces["player"] and game.forces["player"].technologies and game.forces["player"].technologies["ei_black-hole-exploration"].enabled == true then
         model.new_mechanics.black_hole = 1
     end
-    ]]
 
     return model
 
@@ -87,12 +74,12 @@ end
 -- GAME RELATED:
 --  - remind to check settings
 --  - ages and tech (tiered labs)
---  - how age progress and research works
+--  - how research cost scaling works
 
 -- WORLD GEN REALTED:
 --  - resources: stone, surface patches and veins
 --  - artifacts
---  - knowledge system
+--  - artifact repair, alien tech tree (alien knowledge), gate
 
 -- NEW LOGISTCS:
 --  - EI has tons of new logistic options
@@ -103,7 +90,6 @@ end
 -- NEW MECHANICS:
 --  - Beacon overhaul
 --  - spezialised pipes and cables
---  - space destinations
 --  - Induction matrix
 --  - Exotic explosives
 
@@ -127,7 +113,7 @@ function model.exotic_industries_informatron(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_plasma-cube-logo"}
+    image_container.add{type = "sprite", sprite = "ei-plasma-cube-logo"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.welcome-text-2"}}
 end
@@ -157,8 +143,9 @@ function model.ages_and_tech(player_index, element)
     element.add{type = "label", caption = {"exotic-industries-informatron.ages-and-tech-2"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.ages-and-tech-text-2"}}
 
-    -- element.add{type = "label", caption = {"exotic-industries-informatron.tech"}, style = "heading_1_label"}
-    -- element.add{type = "label", caption = {"exotic-industries-informatron.tech-text"}}
+    -- technology cost scaling (the old "N % of the previous age" gate was removed in 3.2.0)
+    element.add{type = "label", caption = {"exotic-industries-informatron.tech"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.tech-text"}}
 
 end
 
@@ -172,16 +159,14 @@ function model.resources(player_index, element)
     element.add{type = "label", caption = {"exotic-industries-informatron.resources"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.resources-text"}}
 
-    element.add{type = "label", caption = {"exotic-industries-informatron.surface-patches"}, style = "heading_1_label"}
-    element.add{type = "label", caption = {"exotic-industries-informatron.surface-patches-text"}}
+    -- 3.1.0: the "surface patches" block was removed - its heading and text were empty strings
+    element.add{type = "label", caption = {"exotic-industries-informatron.veins"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.veins-text"}}
 
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_uranium_patch"}
-
-    element.add{type = "label", caption = {"exotic-industries-informatron.veins"}, style = "heading_1_label"}
-    element.add{type = "label", caption = {"exotic-industries-informatron.veins-text"}}
+    image_container.add{type = "sprite", sprite = "ei-uranium_patch"}
 end
 
 function model.artifacts(player_index, element)
@@ -191,7 +176,7 @@ function model.artifacts(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_artifact"}
+    image_container.add{type = "sprite", sprite = "ei-artifact"}
 end
 
 function model.gate(player_index, element)
@@ -201,33 +186,40 @@ function model.gate(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_gate"}
+    image_container.add{type = "sprite", sprite = "ei-gate"}
 
-    element.add{type = "label", caption = {"exotic-industries-informatron.drone"}, style = "heading_1_label"}
-    element.add{type = "label", caption = {"exotic-industries-informatron.drone-text"}}
+    -- 3.2.0: calibration with planet samples (other/<rock>-rock.png illustrations)
+    element.add{type = "label", caption = {"exotic-industries-informatron.gate-calibration"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.gate-calibration-text"}}
 
-    local image_container = element.add{type = "flow"}
-    image_container.style.horizontal_align = "center"
-    image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_drone"}
+    local samples = element.add{type = "flow", direction = "horizontal"}
+    samples.style.horizontal_align = "center"
+    samples.style.horizontally_stretchable = true
+    samples.style.horizontal_spacing = 16
+    for _, sample in pairs({
+        {"mars", "vulcanus"}, {"uran", "gleba"}, {"sulf", "fulgora"}, {"exotic", "aquilo"}, {"moon", "gaia"},
+    }) do
+        local item = "ei-planet-sample-" .. sample[2]
+        if prototypes.item[item] then
+            samples.add{type = "sprite", sprite = "ei-planet-sample-" .. sample[1], tooltip = prototypes.item[item].localised_name}
+        end
+    end
 end
 
+-- 3.1.0: own page (no longer repeats the artifacts introduction), mentions resonance data
 function model.repair(player_index, element)
-    element.add{type = "label", caption = {"exotic-industries-informatron.artifacts"}, style = "heading_1_label"}
-    element.add{type = "label", caption = {"exotic-industries-informatron.artifacts-text"}}
-
-    local image_container = element.add{type = "flow"}
-    image_container.style.horizontal_align = "center"
-    image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_artifact"}
-
     element.add{type = "label", caption = {"exotic-industries-informatron.repair"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.repair-text"}}
+
+    element.add{type = "label", caption = {"exotic-industries-informatron.resonance"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.resonance-text"}}
 end
 
--- the old knowledge system was removed, its page now shows the artifact information
-function model.knowledge(player_index, element)
-    model.artifacts(player_index, element)
+-- 3.1.0: alien tech tree page (was referenced by alien_system.lua but never registered)
+function model.alien(player_index, element)
+    element.add{type = "label", caption = {"exotic-industries-informatron.alien"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.alien-text"}}
+    ei_alien_system.make_tiers(player_index, element)
 end
 
 
@@ -243,7 +235,7 @@ function model.train_progression(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_train_progression"}
+    image_container.add{type = "sprite", sprite = "ei-train_progression"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.spidertron"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.spidertron-text"}}
@@ -256,10 +248,24 @@ function model.cranes_and_belts(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_robots"}
+    image_container.add{type = "sprite", sprite = "ei-robots"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.bots"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.bots-text"}}
+end
+
+
+-- 3.2.0: wireless circuit network channels
+function model.radio_stations(player_index, element)
+    element.add{type = "label", caption = {"exotic-industries-informatron.radio-stations"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.radio-stations-text"}}
+end
+
+
+-- 3.2.0: drone port and script drones
+function model.drones(player_index, element)
+    element.add{type = "label", caption = {"exotic-industries-informatron.drones"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.drones-text"}}
 end
 
 
@@ -275,7 +281,7 @@ function model.beacon_overhaul(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_beacons"}
+    image_container.add{type = "sprite", sprite = "ei-beacons"}
 end
 
 function model.specialised_pipes(player_index, element)
@@ -285,7 +291,35 @@ function model.specialised_pipes(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_pipes"}
+    image_container.add{type = "sprite", sprite = "ei-pipes"}
+end
+
+-- 3.1.0: Gaia as the hub of the system (design doc "Alien chain and Gaia hub")
+function model.gaia_hub(player_index, element)
+    element.add{type = "label", caption = {"exotic-industries-informatron.gaia-hub"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.gaia-hub-text"}}
+
+    element.add{type = "label", caption = {"exotic-industries-informatron.storm"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.storm-text"}}
+
+    local image_container = element.add{type = "flow"}
+    image_container.style.horizontal_align = "center"
+    image_container.style.horizontally_stretchable = true
+    image_container.add{type = "sprite", sprite = "ei-conduit"}
+
+    element.add{type = "label", caption = {"exotic-industries-informatron.data-center"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.data-center-text"}}
+
+    image_container = element.add{type = "flow"}
+    image_container.style.horizontal_align = "center"
+    image_container.style.horizontally_stretchable = true
+    image_container.add{type = "sprite", sprite = "ei-data_center"}
+
+    element.add{type = "label", caption = {"exotic-industries-informatron.orbital-combinator"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.orbital-combinator-text"}}
+
+    element.add{type = "label", caption = {"exotic-industries-informatron.void-rift"}, style = "heading_1_label"}
+    element.add{type = "label", caption = {"exotic-industries-informatron.void-rift-text"}}
 end
 
 function model.induction_matrix(player_index, element)
@@ -295,7 +329,7 @@ function model.induction_matrix(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_induction_matrix"}
+    image_container.add{type = "sprite", sprite = "ei-induction_matrix"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.induction-matrix-2"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.induction-matrix-2-text"}}
@@ -308,7 +342,7 @@ function model.exotic_stabilizer(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_exotic_stabilizers"}
+    image_container.add{type = "sprite", sprite = "ei-exotic_stabilizers"}
 end
 
 function model.black_hole(player_index, element)
@@ -318,7 +352,7 @@ function model.black_hole(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_black_hole"}
+    image_container.add{type = "sprite", sprite = "ei-black_hole"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.black-hole-2"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.black-hole-2-text"}}
@@ -340,7 +374,7 @@ function model.fission(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_fission_reactors"}
+    image_container.add{type = "sprite", sprite = "ei-fission_reactors"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.fission-reactors-2"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.fission-reactors-2-text"}}
@@ -353,104 +387,47 @@ function model.fusion_power(player_index, element)
     local image_container = element.add{type = "flow"}
     image_container.style.horizontal_align = "center"
     image_container.style.horizontally_stretchable = true
-    image_container.add{type = "sprite", sprite = "ei_fusion_power"}
+    image_container.add{type = "sprite", sprite = "ei-fusion_power"}
 
     element.add{type = "label", caption = {"exotic-industries-informatron.fusion-power-2"}, style = "heading_1_label"}
     element.add{type = "label", caption = {"exotic-industries-informatron.fusion-power-2-text"}}
 end
 
+-- page name -> content function (page names come from model.menu + the root page)
+local PAGES = {
+    ["exotic-industries-informatron"] = model.exotic_industries_informatron,
+    game_related = model.game_related,
+    overall = model.overall,
+    ages_and_tech = model.ages_and_tech,
+    world_gen_related = model.world_gen_related,
+    resources = model.resources,
+    artifacts = model.artifacts,
+    repair = model.repair,
+    alien = model.alien,
+    gate = model.gate,
+    new_logistics = model.new_logistics,
+    train_progression = model.train_progression,
+    cranes_and_belts = model.cranes_and_belts,
+    radio_stations = model.radio_stations,
+    drones = model.drones,
+    new_mechanics = model.new_mechanics,
+    beacon_overhaul = model.beacon_overhaul,
+    specialised_pipes = model.specialised_pipes,
+    gaia_hub = model.gaia_hub,
+    induction_matrix = model.induction_matrix,
+    exotic_stabilizer = model.exotic_stabilizer,
+    black_hole = model.black_hole,
+    nuclear_fission_and_fusion = model.nuclear_fission_and_fusion,
+    fission = model.fission,
+    fusion_power = model.fusion_power,
+}
+
+---Builds the content of one InformaTron page.
 function model.page_content(page_name, player_index, element)
-    if page_name == "exotic-industries-informatron" then
-        model.exotic_industries_informatron(player_index, element)
+    local page = PAGES[page_name]
+    if page then
+        page(player_index, element)
     end
-
-    -- =======================================================
-    if page_name == "game_related" then
-        model.game_related(player_index, element)
-    end
-
-    if page_name == "overall" then
-        model.overall(player_index, element)
-    end
-
-    if page_name == "ages_and_tech" then
-        model.ages_and_tech(player_index, element)
-    end
-
-    -- =======================================================
-    if page_name == "world_gen_related" then
-        model.world_gen_related(player_index, element)
-    end
-
-    if page_name == "resources" then
-        model.resources(player_index, element)
-    end
-
-    if page_name == "repair" then
-        model.repair(player_index, element)
-    end
-
-    if page_name == "artifacts" then
-        model.artifacts(player_index, element)
-    end
-
-    if page_name == "knowledge" then
-        model.knowledge(player_index, element)
-    end
-
-    if page_name == "gate" then
-        model.gate(player_index, element)
-    end
-
-    -- =======================================================
-    if page_name == "new_logistics" then
-        model.new_logistics(player_index, element)
-    end
-
-    if page_name == "train_progression" then
-        model.train_progression(player_index, element)
-    end
-
-    if page_name == "cranes_and_belts" then
-        model.cranes_and_belts(player_index, element)
-    end
-
-    -- =======================================================
-    if page_name == "new_mechanics" then
-        model.new_mechanics(player_index, element)
-    end
-
-    if page_name == "beacon_overhaul" then
-        model.beacon_overhaul(player_index, element)
-    end
-
-    if page_name == "specialised_pipes" then
-        model.specialised_pipes(player_index, element)
-    end
-
-    if page_name == "induction_matrix" then
-        model.induction_matrix(player_index, element)
-    end
-
-    if page_name == "exotic_stabilizer" then
-        model.exotic_stabilizer(player_index, element)
-    end
-
-    if page_name == "black_hole" then
-        model.black_hole(player_index, element)
-    end
-
-    -- =======================================================
-    if page_name == "nuclear_fission_and_fusion" then
-        model.nuclear_fission_and_fusion(player_index, element)
-    end
-
-    if page_name == "fission" then
-        model.fission(player_index, element)
-    end
-
-    if page_name == "fusion_power" then
-        model.fusion_power(player_index, element)
-    end
-
 end
+
+return model

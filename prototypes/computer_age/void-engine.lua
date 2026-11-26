@@ -27,7 +27,7 @@ data:extend({
         subgroup = "intermediate-product",
         order = "d[empty-barrel]-1",
         stack_size = 50,
-        fuel_category = "chemical",
+        fuel_categories = {"chemical"},
         fuel_value = "1GJ",
     },
     {
@@ -42,7 +42,7 @@ data:extend({
     {
         name = "ei-void-engine",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 4,
         ingredients =
         {
@@ -59,7 +59,7 @@ data:extend({
     {
         name = "ei-void-inflator",
         type = "recipe",
-        category = "crafting",
+        categories = {"crafting"},
         energy_required = 10,
         ingredients =
         {
@@ -73,7 +73,7 @@ data:extend({
     {
         name = "ei-void-fuel",
         type = "recipe",
-        category = "ei-void-engine",
+        categories = {"ei-void-engine"},
         energy_required = 100,
         ingredients =
         {
@@ -81,8 +81,8 @@ data:extend({
             {type="item", name="ei-empty-cryo-container", amount=1},
         },
         results = {
-            {type="item", name="ei-void-fuel", amount=1, probability=0.1},
-            {type="item", name="ei-empty-cryo-container", amount=1, probability=0.9}
+            {type="item", name="ei-void-fuel", amount=1, independent_probability=0.1},
+            {type="item", name="ei-empty-cryo-container", amount=1, independent_probability=0.9}
         },
         enabled = false,
         always_show_made_in = true,
@@ -93,7 +93,8 @@ data:extend({
         type = "technology",
         icon = ei_void_engine_path.."void-engine.png",
         icon_size = 256,
-        prerequisites = {"ei-sus-plating"},
+        -- 3.2.0: alien tree tier 5, script-only (scripts/data-final-updates/alien_tree_techs.lua)
+        prerequisites = {"ei-resonance-synthesizer"},
         effects = {
             {
                 type = "unlock-recipe",
@@ -108,10 +109,9 @@ data:extend({
                 recipe = "ei-void-fuel"
             },
         },
-        unit = {
-            count = 100,
-            ingredients = ei_data.science["alien-computer-age"],
-            time = 20
+        research_trigger = {
+            type = "scripted",
+            trigger_description = {"technology-description.ei-alien-tree-trigger"},
         },
     },
     {
@@ -146,9 +146,9 @@ data:extend({
         result_inventory_size = 1,
         source_inventory_size = 1,
         allowed_effects = {"speed", "consumption", "pollution"},
-        module_specification = {
-            module_slots = 20
-        },
+        -- 3.1.0 fix: Factorio 2.0 ignores the 1.x "module_specification" table, so the engine had
+        -- 0 module slots although allowed_effects were defined; module_slots is the 2.0 field
+        module_slots = 20,
         radius_visualisation_specification = {
             sprite = {
                 filename = ei_graphics_other_path.."radius.png",
