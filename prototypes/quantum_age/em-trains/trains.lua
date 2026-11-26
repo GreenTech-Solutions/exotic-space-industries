@@ -636,55 +636,6 @@ data:extend({
 			{type = "acid",decrease = 10,percent = 20}
 		},
 		vertical_selection_shift = -0.8,
-		gui_front_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/front-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_center_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/center-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_back_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/back-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_connect_front_center_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/connector-front-center.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_connect_center_back_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/connector-center-back.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_front_center_tank_indiciation =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/1.png",
-			width = 32,
-			height = 32,
-			flags = {"icon"}
-		},
-		gui_center_back_tank_indiciation =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/2.png",
-			width = 32,
-			height = 32,
-			flags = {"icon"}
-		},
 		--back_light = rolling_stock_back_light(),
 		stand_by_light = rolling_stock_standby_light(),
 		pictures =

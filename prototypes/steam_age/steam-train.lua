@@ -293,7 +293,6 @@ data:extend({
 		},
 		drive_over_tie_trigger = drive_over_tie(),
 		tie_distance = 50,
-		vehicle_impact_sound =  { filename = "__base__/sound/car-metal-impact.ogg", volume = 0.65 },
 		working_sound =
 		{
 			sound =
@@ -387,7 +386,6 @@ data:extend({
 		open_sound = { filename = "__base__/sound/machine-open.ogg", volume = 0.85 },
 		close_sound = { filename = "__base__/sound/machine-close.ogg", volume = 0.75 },
 		sound_minimum_speed = 0.5;
-		vehicle_impact_sound =  { filename = "__base__/sound/car-wood-impact.ogg", volume = 1.0 },
 	},
 
 
@@ -562,7 +560,6 @@ data:extend({
 		open_sound = { filename = "__base__/sound/machine-open.ogg", volume = 0.85 },
 		close_sound = { filename = "__base__/sound/machine-close.ogg", volume = 0.75 },
 		sound_minimum_speed = 0.5;
-		vehicle_impact_sound =  { filename = "__base__/sound/car-wood-impact.ogg", volume = 1.0 },
 	},
 	{
 		type = "fluid-wagon",
@@ -582,55 +579,6 @@ data:extend({
 		collision_box = {{-0.6, -2.4}, {0.6, 2.4}},
 		selection_box = {{-1, -2.7}, {1, 3.297}},
 
-		gui_front_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/front-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_center_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/center-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_back_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/back-tank.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_connect_front_center_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/connector-front-center.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_connect_center_back_tank =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/connector-center-back.png",
-			width = 64,
-			height = 64,
-			flags = {"icon"}
-		},
-		gui_front_center_tank_indiciation =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/1.png",
-			width = 32,
-			height = 32,
-			flags = {"icon"}
-		},
-		gui_center_back_tank_indiciation =
-		{
-			filename = "__base__/graphics/entity/fluid-wagon/gui/2.png",
-			width = 32,
-			height = 32,
-			flags = {"icon"}
-		},
 
 		vertical_selection_shift = -0.8,
 
@@ -696,7 +644,6 @@ data:extend({
 			match_volume_to_activity = true,
 		},
 		sound_minimum_speed = 0.5;
-		vehicle_impact_sound =  { filename = "__base__/sound/car-wood-impact.ogg", volume = 1.0 },
 	},
 	{
 		type = "locomotive",
@@ -856,7 +803,6 @@ data:extend({
 		},
 		drive_over_tie_trigger = drive_over_tie(),
 		tie_distance = 50,
-		vehicle_impact_sound = {filename = "__base__/sound/car-metal-impact.ogg", volume = 0.65},
 		working_sound = {
 			sound = {
 				filename = "__base__/sound/steam-engine-90bpm.ogg",
